@@ -11,6 +11,7 @@ import {
   type ServiceTaskNode,
   type ProcessInstance,
   type UserTaskNode,
+  type TimerNode,
   edgeById,
   getNode,
   outgoingEdges,
@@ -27,6 +28,8 @@ export interface EngineEvent {
     | "service.failed"
     | "service.retried"
     | "gateway.evaluated"
+    | "timer.scheduled"
+    | "timer.fired"
     | "instance.completed"
     | "instance.failed";
   nodeId?: string;
@@ -42,6 +45,7 @@ export interface EngineDeps {
 
 export type AdvanceResult =
   | { status: "waiting"; task: UserTaskNode }
+  | { status: "sleeping"; timer: TimerNode }
   | { status: "completed" }
   | { status: "failed"; error: string };
 
@@ -89,6 +93,10 @@ export function validateDefinition(def: ProcessDefinition): string[] {
       }
       case "userTask":
         if (out.length !== 1) errors.push(`User task '${node.name}' must have exactly one outgoing edge`);
+        break;
+      case "timer":
+        if (out.length !== 1) errors.push(`Timer '${node.name}' must have exactly one outgoing edge`);
+        if (!node.delaySeconds && !node.untilPath) errors.push(`Timer '${node.name}' needs a delay or an 'until' path`);
         break;
       case "start":
         if (out.length !== 1) errors.push(`Start must have exactly one outgoing edge`);
@@ -281,6 +289,12 @@ export async function advance(
           instance.currentNodeId = edge.to;
           break;
         }
+        case "timer": {
+          // Park here; the scheduler computes the wake time and resumes later.
+          instance.status = "waiting";
+          deps.emit({ type: "timer.scheduled", nodeId: node.id });
+          return { status: "sleeping", timer: node };
+        }
         case "end": {
           instance.status = "completed";
           deps.emit({ type: "instance.completed", nodeId: node.id });
@@ -320,6 +334,28 @@ export async function completeTask(
   }
   applyOutputMap(instance.context, formData, node.outputMap);
   deps.emit({ type: "task.completed", nodeId: node.id, payload: formData as Json });
+  instance.currentNodeId = singleNext(def, node.id);
+  return advance(def, instance, deps);
+}
+
+/**
+ * Resume an instance parked at a timer node once its wake time has passed: step
+ * past the timer to its next node, then run forward again.
+ */
+export async function resumeTimer(
+  def: ProcessDefinition,
+  instance: ProcessInstance,
+  timerNodeId: string,
+  deps: EngineDeps,
+): Promise<AdvanceResult> {
+  const node = getNode(def, timerNodeId);
+  if (node.type !== "timer") {
+    return { status: "failed", error: `Node ${timerNodeId} is not a timer` };
+  }
+  if (instance.currentNodeId !== timerNodeId) {
+    return { status: "failed", error: `Instance is not sleeping at ${timerNodeId} (at ${instance.currentNodeId})` };
+  }
+  deps.emit({ type: "timer.fired", nodeId: node.id });
   instance.currentNodeId = singleNext(def, node.id);
   return advance(def, instance, deps);
 }

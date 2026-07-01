@@ -27,7 +27,7 @@ Make runs survive flaky connectors and make failures actionable.
 - Instances capture a **failure reason**; Monitor shows it and offers **Retry** (re-run from the failed node).
 - New engine events: `service.failed`, `instance.failed`, `service.retried`.
 
-### M7 — Timers, delays & SLAs
+### M7 — Timers, delays & SLAs ✅
 Give the engine a sense of time.
 - New **`timer` node** (wait N seconds, or until a context date) resumed by a **background scheduler**.
 - **Due dates / SLA** on user tasks; overdue instances surfaced on Home / Monitor.

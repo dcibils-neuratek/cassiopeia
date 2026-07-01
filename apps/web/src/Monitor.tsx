@@ -3,7 +3,9 @@ import { api } from "./api.js";
 
 type Instance = { id: string; defId: string; status: string; currentNodeId: string; context: Record<string, unknown>; error?: string };
 type Event = { type: string; nodeId?: string; payload?: unknown; ts: string };
-type Detail = { instance: Instance; events: Event[] };
+type OpenTask = { id: string; nodeId: string; dueAt?: string | null } | null;
+type OpenTimer = { nodeId: string; wakeAt: string } | null;
+type Detail = { instance: Instance; events: Event[]; openTask?: OpenTask; openTimer?: OpenTimer };
 
 const STATUS_COLOR: Record<string, string> = {
   running: "#2563eb", waiting: "#d97706", completed: "#16a34a", failed: "#dc2626",
@@ -21,7 +23,7 @@ export function Monitor() {
   async function open(id: string) {
     openId.current = id;
     const r = await api(`/instances/${id}`);
-    setDetail({ instance: r.data.instance, events: r.data.events });
+    setDetail({ instance: r.data.instance, events: r.data.events, openTask: r.data.openTask, openTimer: r.data.openTimer });
   }
   async function retry(id: string) {
     setRetrying(true);
@@ -42,7 +44,7 @@ export function Monitor() {
       await reloadList();
       if (openId.current) { // keep the open detail live too
         const r = await api(`/instances/${openId.current}`);
-        if (alive) setDetail({ instance: r.data.instance, events: r.data.events });
+        if (alive) setDetail({ instance: r.data.instance, events: r.data.events, openTask: r.data.openTask, openTimer: r.data.openTimer });
       }
     };
     load();
@@ -95,6 +97,14 @@ export function Monitor() {
             <div style={{ fontSize: 13, margin: "6px 0" }}>
               <b style={{ color: STATUS_COLOR[detail.instance.status] }}>{detail.instance.status}</b> · at {detail.instance.currentNodeId}
             </div>
+            {detail.openTimer && (
+              <div style={S.timerBox}>⏱ Sleeping until {new Date(detail.openTimer.wakeAt).toLocaleString()}</div>
+            )}
+            {detail.openTask?.dueAt && (
+              <div style={new Date(detail.openTask.dueAt) < new Date() ? S.overdueBox : S.dueBox}>
+                {new Date(detail.openTask.dueAt) < new Date() ? "⚠ Overdue" : "⏳ Due"} {new Date(detail.openTask.dueAt).toLocaleString()}
+              </div>
+            )}
             {detail.instance.status === "failed" && (
               <div style={S.errBox}>
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ Failed</div>
@@ -129,4 +139,7 @@ const S: Record<string, React.CSSProperties> = {
   pre: { background: "#f8fafc", borderRadius: 8, padding: 12, fontSize: 12, overflowX: "auto", marginTop: 8 },
   errBox: { background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: 8, padding: 12, fontSize: 12, margin: "8px 0" },
   retryBtn: { background: "#dc2626", color: "white", border: 0, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
+  timerBox: { background: "#ecfeff", border: "1px solid #a5f3fc", color: "#155e75", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
+  dueBox: { background: "#f0f9ff", border: "1px solid #bae6fd", color: "#075985", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
+  overdueBox: { background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
 };

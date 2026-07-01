@@ -26,6 +26,15 @@ export interface TaskRow {
   nodeId: string;
   formId: string | null;
   status: "open" | "completed";
+  dueAt?: string | null;
+}
+
+export interface TimerRow {
+  id: string;
+  instanceId: string;
+  nodeId: string;
+  wakeAt: string;
+  status: "open" | "fired";
 }
 
 export interface StoredEvent extends EngineEvent {
@@ -82,6 +91,13 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       payload_json TEXT,
       ts TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS timers (
+      id TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      wake_at TEXT NOT NULL,
+      status TEXT NOT NULL
+    );
   `);
   migrate();
 }
@@ -97,6 +113,7 @@ function addColumnIfMissing(table: string, column: string, decl: string): void {
 /** Additive, idempotent schema migrations so existing data/ upgrades cleanly. */
 function migrate(): void {
   addColumnIfMissing("instances", "error", "error TEXT");
+  addColumnIfMissing("tasks", "due_at", "due_at TEXT");
 }
 
 // ---- definitions ----
@@ -285,10 +302,22 @@ export function listInstances(): ProcessInstance[] {
 
 // ---- tasks ----
 
+function rowToTask(row: Record<string, unknown>): TaskRow {
+  return {
+    id: row.id as string,
+    instanceId: row.instance_id as string,
+    nodeId: row.node_id as string,
+    formId: (row.form_id as string) ?? null,
+    status: row.status as TaskRow["status"],
+    dueAt: (row.due_at as string) ?? null,
+  };
+}
+
 export function createTask(
   instanceId: string,
   nodeId: string,
   formId: string | null,
+  dueAt: string | null = null,
 ): TaskRow {
   const task: TaskRow = {
     id: randomUUID(),
@@ -296,11 +325,12 @@ export function createTask(
     nodeId,
     formId,
     status: "open",
+    dueAt,
   };
   db.prepare(
-    `INSERT INTO tasks (id, instance_id, node_id, form_id, status)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(task.id, instanceId, nodeId, formId, task.status);
+    `INSERT INTO tasks (id, instance_id, node_id, form_id, status, due_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(task.id, instanceId, nodeId, formId, task.status, dueAt);
   return task;
 }
 
@@ -309,13 +339,7 @@ export function getTask(id: string): TaskRow {
     | Record<string, unknown>
     | undefined;
   if (!row) throw new Error(`Task not found: ${id}`);
-  return {
-    id: row.id as string,
-    instanceId: row.instance_id as string,
-    nodeId: row.node_id as string,
-    formId: (row.form_id as string) ?? null,
-    status: row.status as TaskRow["status"],
-  };
+  return rowToTask(row);
 }
 
 export function openTaskForInstance(instanceId: string): TaskRow | undefined {
@@ -326,17 +350,58 @@ export function openTaskForInstance(instanceId: string): TaskRow | undefined {
     )
     .get(instanceId) as Record<string, unknown> | undefined;
   if (!row) return undefined;
-  return {
-    id: row.id as string,
-    instanceId: row.instance_id as string,
-    nodeId: row.node_id as string,
-    formId: (row.form_id as string) ?? null,
-    status: row.status as TaskRow["status"],
-  };
+  return rowToTask(row);
+}
+
+/** All open tasks across all instances (for the Inbox / SLA views). */
+export function listOpenTasks(): TaskRow[] {
+  const rows = db
+    .prepare(`SELECT * FROM tasks WHERE status = 'open' ORDER BY rowid DESC`)
+    .all() as Record<string, unknown>[];
+  return rows.map(rowToTask);
 }
 
 export function completeTaskRow(id: string): void {
   db.prepare(`UPDATE tasks SET status = 'completed' WHERE id = ?`).run(id);
+}
+
+// ---- timers ----
+
+export function createTimer(instanceId: string, nodeId: string, wakeAt: string): TimerRow {
+  const t: TimerRow = { id: randomUUID(), instanceId, nodeId, wakeAt, status: "open" };
+  db.prepare(
+    `INSERT INTO timers (id, instance_id, node_id, wake_at, status) VALUES (?, ?, ?, ?, ?)`,
+  ).run(t.id, instanceId, nodeId, wakeAt, t.status);
+  return t;
+}
+
+function rowToTimer(row: Record<string, unknown>): TimerRow {
+  return {
+    id: row.id as string,
+    instanceId: row.instance_id as string,
+    nodeId: row.node_id as string,
+    wakeAt: row.wake_at as string,
+    status: row.status as TimerRow["status"],
+  };
+}
+
+/** Open timers whose wake time has passed. */
+export function dueTimers(nowIso: string): TimerRow[] {
+  const rows = db
+    .prepare(`SELECT * FROM timers WHERE status = 'open' AND wake_at <= ? ORDER BY wake_at ASC`)
+    .all(nowIso) as Record<string, unknown>[];
+  return rows.map(rowToTimer);
+}
+
+export function openTimerForInstance(instanceId: string): TimerRow | undefined {
+  const row = db
+    .prepare(`SELECT * FROM timers WHERE instance_id = ? AND status = 'open' ORDER BY rowid DESC LIMIT 1`)
+    .get(instanceId) as Record<string, unknown> | undefined;
+  return row ? rowToTimer(row) : undefined;
+}
+
+export function fireTimerRow(id: string): void {
+  db.prepare(`UPDATE timers SET status = 'fired' WHERE id = ?`).run(id);
 }
 
 // ---- events (audit trail) ----

@@ -4,9 +4,10 @@ import { FormRenderer, type FormValues } from "@cassiopeia/form-kit";
 import { api } from "./api.js";
 
 type OpenTask = { id: string; nodeId: string; formId: string | null } | null;
+type OpenTimer = { nodeId: string; wakeAt: string } | null;
 type Instance = { id: string; status: string; currentNodeId: string; context: Record<string, unknown> };
 type Event = { type: string; nodeId?: string; payload?: unknown };
-type State = { instance: Instance; openTask: OpenTask; events: Event[] };
+type State = { instance: Instance; openTask: OpenTask; openTimer?: OpenTimer; events: Event[] };
 
 export function Portal({ defId, autoStart }: { defId: string; autoStart?: boolean }) {
   const [state, setState] = useState<State | null>(null);
@@ -37,6 +38,16 @@ export function Portal({ defId, autoStart }: { defId: string; autoStart?: boolea
     setState((await api(`/instances/${state.instance.id}`)).data);
   }
 
+  // While the run is parked on a timer, poll so the UI resumes when it fires.
+  useEffect(() => {
+    if (!state?.openTimer) return;
+    const id = state.instance.id;
+    const t = setInterval(async () => {
+      setState((await api(`/instances/${id}`)).data);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [state?.openTimer?.wakeAt, state?.instance.id]);
+
   return (
     <div>
       <button style={S.primary} onClick={start}>Start new instance</button>
@@ -44,7 +55,12 @@ export function Portal({ defId, autoStart }: { defId: string; autoStart?: boolea
         <div style={S.grid}>
           <section style={S.card}>
             <h2 style={S.h2}>{form ? form.title : "Current task"}</h2>
-            {!state.openTask && (
+            {!state.openTask && state.openTimer && (
+              <p style={{ color: "#0891b2", fontWeight: 600 }}>
+                ⏱ Waiting until {new Date(state.openTimer.wakeAt).toLocaleString()} — the run resumes automatically.
+              </p>
+            )}
+            {!state.openTask && !state.openTimer && (
               <p style={{ color: "#16a34a", fontWeight: 600 }}>
                 ✓ No open task — instance is {state.instance.status}
               </p>

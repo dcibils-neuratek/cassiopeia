@@ -29,7 +29,8 @@ export type NodeType =
   | "end"
   | "userTask"
   | "serviceTask"
-  | "gateway";
+  | "gateway"
+  | "timer";
 
 export interface StartNode {
   id: string;
@@ -47,6 +48,21 @@ export interface UserTaskNode {
   formId?: string;
   /** Where the submitted form data lands. Omit to merge at context root. */
   outputMap?: Mapping;
+  /** Service-level target: hours until the task is considered overdue. */
+  slaHours?: number;
+}
+
+/**
+ * Wait node. The engine parks here; a background scheduler resumes it once the
+ * wake time passes. `delaySeconds` waits a fixed duration; `untilPath` reads an
+ * ISO date from the context to wait until (takes precedence when it parses).
+ */
+export interface TimerNode {
+  id: string;
+  type: "timer";
+  name: string;
+  delaySeconds?: number;
+  untilPath?: ContextPath;
 }
 export interface ServiceTaskNode {
   id: string;
@@ -84,7 +100,8 @@ export type Node =
   | EndNode
   | UserTaskNode
   | ServiceTaskNode
-  | GatewayNode;
+  | GatewayNode
+  | TimerNode;
 
 export interface Edge {
   id: string;

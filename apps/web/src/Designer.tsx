@@ -31,6 +31,7 @@ const NODE_UI: Record<string, { color: string }> = {
   userTask: { color: "#2563eb" },
   serviceTask: { color: "#7c3aed" },
   gateway: { color: "#d97706" },
+  timer: { color: "#0891b2" },
 };
 
 function label(n: ModelNode): string {
@@ -44,7 +45,8 @@ function CassNode({ data, selected }: { data: { node: ModelNode }; selected: boo
   const ui = NODE_UI[n.type];
   const sub =
     n.type === "userTask" ? (n.formId ? "📝 form attached" : "no form yet") :
-    n.type === "serviceTask" ? (n.connectorId ? `⚙ ${n.connectorId}` : "no connector") : "";
+    n.type === "serviceTask" ? (n.connectorId ? `⚙ ${n.connectorId}` : "no connector") :
+    n.type === "timer" ? (n.untilPath ? `⏱ until ${n.untilPath}` : `⏱ ${n.delaySeconds ?? 0}s`) : "";
   return (
     <div
       style={{
@@ -136,6 +138,7 @@ export function Designer({ defId }: { defId: string }) {
     if (type === "userTask") node = { id, type, name: "User Task" };
     else if (type === "serviceTask") node = { id, type, name: "Service Task", connectorId: "" };
     else if (type === "gateway") node = { id, type, name: "Gateway", branches: [], defaultEdgeId: "" };
+    else if (type === "timer") node = { id, type, name: "Wait", delaySeconds: 60 };
     else if (type === "end") node = { id, type };
     else node = { id, type: "start" };
     const spawn = 80 + nodes.length * 20;
@@ -292,7 +295,7 @@ export function Designer({ defId }: { defId: string }) {
       <div style={S.toolbar}>
         <input style={S.nameInput} value={name} onChange={(e) => setName(e.target.value)} />
         <span style={{ fontSize: 12, color: "#94a3b8" }}>Add:</span>
-        {(["userTask", "serviceTask", "gateway", "end", "start"] as const).map((t) => (
+        {(["userTask", "serviceTask", "gateway", "timer", "end", "start"] as const).map((t) => (
           <button key={t} style={S.paletteBtn} onClick={() => addNode(t)}>+ {t}</button>
         ))}
         <div style={{ flex: 1 }} />
@@ -360,6 +363,25 @@ export function Designer({ defId }: { defId: string }) {
                       <button style={S.primary} onClick={() => createFormForTask(selNode)}>Create &amp; design form →</button>
                     )}
                   </div>
+                  <L>SLA — due within (hours)</L>
+                  <input style={S.input} type="number" min={0} placeholder="no deadline"
+                    value={(selNode as any).slaHours ?? ""}
+                    onChange={(e) => updateNode(selNode.id, { slaHours: e.target.value.trim() === "" ? undefined : Math.max(0, Number(e.target.value) || 0) } as any)} />
+                  <p style={S.hint}>Tasks past this are flagged overdue in Monitor.</p>
+                </>
+              )}
+
+              {selNode.type === "timer" && (
+                <>
+                  <L>Wait for (seconds)</L>
+                  <input style={S.input} type="number" min={0} placeholder="60"
+                    value={(selNode as any).delaySeconds ?? ""}
+                    onChange={(e) => updateNode(selNode.id, { delaySeconds: e.target.value.trim() === "" ? undefined : Math.max(0, Number(e.target.value) || 0) } as any)} />
+                  <L>…or wait until (context date path)</L>
+                  <input style={S.input} placeholder="e.g. appointment.date"
+                    value={(selNode as any).untilPath ?? ""}
+                    onChange={(e) => updateNode(selNode.id, { untilPath: e.target.value || undefined } as any)} />
+                  <p style={S.hint}>The engine parks here; a scheduler resumes the run once the time passes. A date path wins over the fixed delay when it resolves.</p>
                 </>
               )}
 

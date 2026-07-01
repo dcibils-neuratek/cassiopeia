@@ -20,6 +20,7 @@ import {
   listInstances,
   maxPublishedVersion,
   openTaskForInstance,
+  openTimerForInstance,
   saveConnector,
   saveDefinition,
   saveForm,
@@ -29,13 +30,14 @@ import { listTemplates, installTemplate } from "./templates.js";
 import { describeProcess } from "./describe.js";
 import { generateWorkflow } from "./ai-build.js";
 import { runConnector, listMcpTools } from "./connectors.js";
-import { startInstance, submitTask, retryInstance } from "./runtime.js";
+import { startInstance, submitTask, retryInstance, startScheduler } from "./runtime.js";
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
 
 initDb();
 seedSample();
+startScheduler(); // resume timer nodes whose wake time has passed
 
 app.get("/health", async () => ({ ok: true }));
 
@@ -306,6 +308,7 @@ app.get("/instances/:id", async (req) => {
   return {
     instance,
     openTask: openTaskForInstance(id) ?? null,
+    openTimer: openTimerForInstance(id) ?? null,
     events: listEvents(id),
   };
 });
