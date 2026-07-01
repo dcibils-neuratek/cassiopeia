@@ -15,10 +15,11 @@ tools), gateways route on the results.
 - **Platform** — Home / Stats / Templates / Build / Run / Monitor / Settings, live polling,
   throughput charts, banking templates, **✦ Describe** + **✦ Build with AI**
 
-## In progress — autonomous M6→M10
+## M6→M10 — shipped (autonomous)
 
-Building toward a production-shaped agentic BPM platform. Each milestone is a
-self-contained, verified increment; the app stays runnable throughout.
+Built toward a production-shaped agentic BPM platform. Each milestone is a
+self-contained, verified increment; the app stays runnable throughout. All five
+are complete and pushed to `origin/main`.
 
 ### M6 — Resilience & error handling ✅
 Make runs survive flaky connectors and make failures actionable.
@@ -43,7 +44,7 @@ Operate workflows over time.
 - **Export / import** a workflow bundle (definition + forms + connectors) as JSON.
 - **Audit CSV** export per instance. A per-process **data dictionary** (context keys produced/consumed).
 
-### M10 — Analytics & AI process analyst
+### M10 — Analytics & AI process analyst ✅
 Close the loop from execution back to design.
 - **Cycle-time & bottleneck** analytics: per-node durations from the event log.
 - An **AI process analyst** that reads run data and suggests concrete improvements (uses the describer LLM).

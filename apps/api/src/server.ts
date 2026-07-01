@@ -35,6 +35,7 @@ import { generateWorkflow } from "./ai-build.js";
 import { runConnector, listMcpTools } from "./connectors.js";
 import { startInstance, submitTask, retryInstance, startScheduler } from "./runtime.js";
 import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBundle } from "./governance.js";
+import { computeAnalytics, analyzeProcess } from "./analytics.js";
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
@@ -83,6 +84,28 @@ app.get("/stats", async () => {
     recent: instances.slice(-10).reverse().map((i) => ({ id: i.id, defId: i.defId, status: i.status, currentNodeId: i.currentNodeId })),
     timeline,
   };
+});
+
+// ---- M10 analytics ----
+app.get("/analytics/:defId", async (req, reply) => {
+  const { defId } = req.params as { defId: string };
+  try {
+    return computeAnalytics(defId);
+  } catch (err) {
+    return reply.code(404).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// AI process analyst: interpret the run metrics and suggest improvements.
+app.post("/definitions/:id/analyze", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const override = (req.body ?? {}) as { baseUrl?: string; apiKey?: string; model?: string };
+  try {
+    const { analytics, suggestions } = await analyzeProcess(id, override);
+    return { ok: true, analytics, suggestions };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
 });
 
 app.get("/templates", async () => listTemplates());

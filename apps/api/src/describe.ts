@@ -62,16 +62,19 @@ const SYSTEM =
   "decisions happen, how it branches, and how it concludes. Write 2–4 short paragraphs. " +
   "Do not use bullet lists, code, or internal ids — just prose.";
 
-export async function describeProcess(
-  defId: string,
+/**
+ * Call the platform `describer` LLM (Claude Haiku by default; any OpenAI-compatible
+ * provider). Shared by Describe and the M10 process analyst.
+ */
+export async function callDescriber(
+  system: string,
+  user: string,
   override?: { baseUrl?: string; apiKey?: string; model?: string },
 ): Promise<string> {
-  const body = outline(defId);
-
   let cfg: Record<string, any> = { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5", apiKey: "" };
   try { cfg = { ...cfg, ...getConnector("describer").config }; } catch { /* not seeded */ }
   for (const [k, v] of Object.entries(override ?? {})) if (v != null && v !== "") cfg[k] = v;
-  if (!cfg.apiKey) throw new Error("No API key set for the description model. Add it in the Describe panel.");
+  if (!cfg.apiKey) throw new Error("No API key set for the description model. Add it in Settings or the Describe panel.");
 
   const res = await fetch(`${String(cfg.baseUrl).replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
@@ -79,8 +82,8 @@ export async function describeProcess(
     body: JSON.stringify({
       model: cfg.model,
       messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: body },
+        { role: "system", content: system },
+        { role: "user", content: user },
       ],
     }),
   });
@@ -90,4 +93,11 @@ export async function describeProcess(
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   return data.choices?.[0]?.message?.content ?? "";
+}
+
+export async function describeProcess(
+  defId: string,
+  override?: { baseUrl?: string; apiKey?: string; model?: string },
+): Promise<string> {
+  return callDescriber(SYSTEM, outline(defId), override);
 }
