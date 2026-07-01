@@ -17,6 +17,7 @@ import {
   getDefinition,
   getInstance,
   getTask,
+  openTaskForInstance,
   saveInstance,
 } from "./db.js";
 import { getNode } from "@cassiopeia/model";
@@ -68,6 +69,27 @@ export async function submitTask(
     if (node.type === "userTask") {
       createTask(inst.id, node.id, node.formId ?? null);
     }
+  }
+  return result;
+}
+
+/**
+ * Re-run a failed instance from the node it stopped on (typically a service task
+ * whose connector errored). Useful once a flaky dependency recovers.
+ */
+export async function retryInstance(instanceId: string): Promise<AdvanceResult> {
+  const inst = getInstance(instanceId);
+  if (inst.status !== "failed") throw new Error("Only failed instances can be retried");
+  const def = getDefinition(inst.defId, inst.defVersion);
+
+  addEvent(inst.id, { type: "node.entered", nodeId: inst.currentNodeId, payload: { retry: true } }, new Date().toISOString());
+  const result = await advance(def, inst, depsFor(inst.id));
+  saveInstance(inst);
+
+  // If it now parks at a user task without an open one, open it.
+  if (result.status === "waiting" && !openTaskForInstance(inst.id)) {
+    const node = getNode(def, inst.currentNodeId);
+    if (node.type === "userTask") createTask(inst.id, node.id, node.formId ?? null);
   }
   return result;
 }

@@ -20,7 +20,7 @@ tools), gateways route on the results.
 Building toward a production-shaped agentic BPM platform. Each milestone is a
 self-contained, verified increment; the app stays runnable throughout.
 
-### M6 — Resilience & error handling
+### M6 — Resilience & error handling ✅
 Make runs survive flaky connectors and make failures actionable.
 - Connector **retries** (config: `retries`, `retryDelayMs`) with backoff + **timeout** (`timeoutMs`).
 - Service-task **error routing**: optional `onError` edge so a failed connector routes instead of killing the instance.

@@ -8,6 +8,7 @@ import {
   type Json,
   type Mapping,
   type ProcessDefinition,
+  type ServiceTaskNode,
   type ProcessInstance,
   type UserTaskNode,
   edgeById,
@@ -23,8 +24,11 @@ export interface EngineEvent {
     | "task.created"
     | "task.completed"
     | "service.completed"
+    | "service.failed"
+    | "service.retried"
     | "gateway.evaluated"
-    | "instance.completed";
+    | "instance.completed"
+    | "instance.failed";
   nodeId?: string;
   payload?: Json;
 }
@@ -74,10 +78,15 @@ export function validateDefinition(def: ProcessDefinition): string[] {
             errors.push(`Gateway '${node.name}' branch references a non-outgoing edge`);
         break;
       }
-      case "serviceTask":
+      case "serviceTask": {
         if (!node.connectorId) errors.push(`Service task '${node.name}' has no connector`);
-        if (out.length !== 1) errors.push(`Service task '${node.name}' must have exactly one outgoing edge`);
+        const successEdges = out.filter((e) => e.id !== node.onErrorEdgeId);
+        if (successEdges.length !== 1)
+          errors.push(`Service task '${node.name}' must have exactly one (non-error) outgoing edge`);
+        if (node.onErrorEdgeId && !out.some((e) => e.id === node.onErrorEdgeId))
+          errors.push(`Service task '${node.name}' error edge is not one of its outgoing edges`);
         break;
+      }
       case "userTask":
         if (out.length !== 1) errors.push(`User task '${node.name}' must have exactly one outgoing edge`);
         break;
@@ -145,6 +154,59 @@ function singleNext(def: ProcessDefinition, nodeId: string): string {
   return edges[0].to;
 }
 
+/** The success edge of a service task = its single outgoing edge that isn't the error edge. */
+function serviceNext(def: ProcessDefinition, node: ServiceTaskNode): string {
+  const edges = outgoingEdges(def, node.id).filter((e) => e.id !== node.onErrorEdgeId);
+  if (edges.length !== 1) {
+    throw new Error(
+      `Service task ${node.id} must have exactly one non-error outgoing edge (found ${edges.length})`,
+    );
+  }
+  return edges[0].to;
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Reject a connector call that runs longer than `ms` (0 disables the timeout). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  if (!ms || ms <= 0) return p;
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`connector timed out after ${ms}ms`)), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
+/** Run a connector with the node's retry/backoff/timeout policy. */
+async function runWithPolicy(
+  node: ServiceTaskNode,
+  input: Context,
+  deps: EngineDeps,
+): Promise<Context> {
+  const retries = Math.max(0, Math.floor(node.retries ?? 0));
+  const base = Math.max(0, node.retryDelayMs ?? 500);
+  const timeoutMs = node.timeoutMs ?? 0;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await withTimeout(deps.runConnector(node.connectorId, input), timeoutMs);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        deps.emit({
+          type: "service.retried",
+          nodeId: node.id,
+          payload: { attempt: attempt + 1, of: retries, error: (err as Error).message },
+        });
+        await sleep(base * Math.pow(2, attempt)); // exponential backoff
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Run the instance forward from its current node until it either parks at a
  * user task (the only wait state in the MVP) or reaches an end node. Mutates
@@ -157,6 +219,7 @@ export async function advance(
 ): Promise<AdvanceResult> {
   try {
     instance.status = "running";
+    instance.error = undefined; // clear any prior failure (e.g. on retry)
     for (;;) {
       const node = getNode(def, instance.currentNodeId);
       deps.emit({ type: "node.entered", nodeId: node.id });
@@ -173,14 +236,32 @@ export async function advance(
         }
         case "serviceTask": {
           const input = applyInputMap(instance.context, node.inputMap);
-          const result = await deps.runConnector(node.connectorId, input);
+          let result: Context;
+          try {
+            result = await runWithPolicy(node, input, deps);
+          } catch (err) {
+            const message = (err as Error).message;
+            deps.emit({ type: "service.failed", nodeId: node.id, payload: { error: message } });
+            // Error routing: if the task has an error edge, stash the error and
+            // continue down it instead of failing the whole instance.
+            if (node.onErrorEdgeId) {
+              instance.context.error = { node: node.id, message };
+              const edge = edgeById(def, node.onErrorEdgeId);
+              instance.currentNodeId = edge.to;
+              break;
+            }
+            instance.status = "failed";
+            instance.error = message;
+            deps.emit({ type: "instance.failed", nodeId: node.id, payload: { error: message } });
+            return { status: "failed", error: message };
+          }
           applyOutputMap(instance.context, result, node.outputMap);
           deps.emit({
             type: "service.completed",
             nodeId: node.id,
             payload: result as Json,
           });
-          instance.currentNodeId = singleNext(def, node.id);
+          instance.currentNodeId = serviceNext(def, node);
           break;
         }
         case "gateway": {
@@ -208,8 +289,11 @@ export async function advance(
       }
     }
   } catch (err) {
+    const message = (err as Error).message;
     instance.status = "failed";
-    return { status: "failed", error: (err as Error).message };
+    instance.error = message;
+    deps.emit({ type: "instance.failed", nodeId: instance.currentNodeId, payload: { error: message } });
+    return { status: "failed", error: message };
   }
 }
 

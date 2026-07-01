@@ -77,6 +77,12 @@ const adapters: Record<string, Adapter> = {
     return { creditScore: score, decision: score >= 650 ? "approved" : "review" };
   },
 
+  // Always throws — used to exercise retries, error routing, and the failed/retry
+  // path in Monitor. config: { message? }.
+  "mock-fail": async (_input, config) => {
+    throw new Error(String(config.message ?? "mock-fail: simulated connector failure"));
+  },
+
   // Register travel so the card works abroad. Swap for the card network API.
   "mock-travel-register": async (input) => {
     const dest = typeof input.destinations === "string" ? input.destinations : "";
@@ -173,7 +179,7 @@ const adapters: Record<string, Adapter> = {
     const url = String(config.url ?? "");
     const toolName = String(config.toolName ?? "");
     if (!url || !toolName) throw new Error("mcp connector needs url and toolName");
-    const auth = config.apiKey ? { authorization: `Bearer ${String(config.apiKey)}` } : {};
+    const auth: Record<string, string> = config.apiKey ? { authorization: `Bearer ${String(config.apiKey)}` } : {};
 
     const init = await mcpPost(
       url,
@@ -218,7 +224,7 @@ export async function listMcpTools(
   apiKey?: string,
 ): Promise<{ name: string; description: string }[]> {
   if (!url) throw new Error("MCP server URL is required");
-  const auth = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
+  const auth: Record<string, string> = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
   const init = await mcpPost(
     url,
     { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "cassiopeia", version: "0.1" } } },

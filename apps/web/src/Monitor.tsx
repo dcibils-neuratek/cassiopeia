@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 
-type Instance = { id: string; defId: string; status: string; currentNodeId: string; context: Record<string, unknown> };
+type Instance = { id: string; defId: string; status: string; currentNodeId: string; context: Record<string, unknown>; error?: string };
 type Event = { type: string; nodeId?: string; payload?: unknown; ts: string };
 type Detail = { instance: Instance; events: Event[] };
 
@@ -16,11 +16,22 @@ export function Monitor() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const openId = useRef<string | null>(null);
 
+  const [retrying, setRetrying] = useState(false);
   async function reloadList() { setList((await api("/instances")).data); }
   async function open(id: string) {
     openId.current = id;
     const r = await api(`/instances/${id}`);
     setDetail({ instance: r.data.instance, events: r.data.events });
+  }
+  async function retry(id: string) {
+    setRetrying(true);
+    try {
+      await api(`/instances/${id}/retry`, { method: "POST" });
+      await open(id);
+      await reloadList();
+    } finally {
+      setRetrying(false);
+    }
   }
 
   useEffect(() => {
@@ -84,6 +95,15 @@ export function Monitor() {
             <div style={{ fontSize: 13, margin: "6px 0" }}>
               <b style={{ color: STATUS_COLOR[detail.instance.status] }}>{detail.instance.status}</b> · at {detail.instance.currentNodeId}
             </div>
+            {detail.instance.status === "failed" && (
+              <div style={S.errBox}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ Failed</div>
+                <div style={{ marginBottom: 8, wordBreak: "break-word" }}>{detail.instance.error ?? "Unknown error"}</div>
+                <button style={S.retryBtn} disabled={retrying} onClick={() => retry(detail.instance.id)}>
+                  {retrying ? "Retrying…" : "↻ Retry from failed step"}
+                </button>
+              </div>
+            )}
             <pre style={S.pre}>{JSON.stringify(detail.instance.context, null, 2)}</pre>
             <div style={{ ...S.head, marginTop: 14 }}>Audit trail</div>
             <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
@@ -107,4 +127,6 @@ const S: Record<string, React.CSSProperties> = {
   th: { padding: "8px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 },
   td: { padding: "8px 12px", color: "var(--text)" },
   pre: { background: "#f8fafc", borderRadius: 8, padding: 12, fontSize: 12, overflowX: "auto", marginTop: 8 },
+  errBox: { background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: 8, padding: 12, fontSize: 12, margin: "8px 0" },
+  retryBtn: { background: "#dc2626", color: "white", border: 0, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
 };

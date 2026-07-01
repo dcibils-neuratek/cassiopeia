@@ -83,6 +83,20 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       ts TEXT NOT NULL
     );
   `);
+  migrate();
+}
+
+/** Add a column only if it isn't already present (idempotent upgrade of old DBs). */
+function addColumnIfMissing(table: string, column: string, decl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${decl}`);
+  }
+}
+
+/** Additive, idempotent schema migrations so existing data/ upgrades cleanly. */
+function migrate(): void {
+  addColumnIfMissing("instances", "error", "error TEXT");
 }
 
 // ---- definitions ----
@@ -253,14 +267,15 @@ export function getInstance(id: string): ProcessInstance {
     status: row.status as ProcessInstance["status"],
     currentNodeId: row.current_node_id as string,
     context: JSON.parse(row.context_json as string) as Context,
+    error: (row.error as string) ?? undefined,
   };
 }
 
 export function saveInstance(inst: ProcessInstance): void {
   db.prepare(
-    `UPDATE instances SET status = ?, current_node_id = ?, context_json = ?
+    `UPDATE instances SET status = ?, current_node_id = ?, context_json = ?, error = ?
      WHERE id = ?`,
-  ).run(inst.status, inst.currentNodeId, JSON.stringify(inst.context), inst.id);
+  ).run(inst.status, inst.currentNodeId, JSON.stringify(inst.context), inst.error ?? null, inst.id);
 }
 
 export function listInstances(): ProcessInstance[] {

@@ -367,6 +367,11 @@ export function Designer({ defId }: { defId: string }) {
                 <ServiceInspector
                   node={selNode}
                   connectors={connectors}
+                  outEdges={edges.filter((e) => e.source === selNode.id).map((e) => {
+                    const tn = nodes.find((n) => n.id === e.target)?.data.node as ModelNode | undefined;
+                    return { id: e.id, toName: tn && "name" in tn && tn.name ? (tn.name as string) : e.target };
+                  })}
+                  onPatch={(patch) => updateNode(selNode.id, patch)}
                   onPick={(cid) => { updateNode(selNode.id, { connectorId: cid } as any); setTestOut(""); }}
                   onNew={(type) => newConnectorFor(selNode, type)}
                   setCfg={setConnectorCfg}
@@ -502,10 +507,12 @@ export function Designer({ defId }: { defId: string }) {
 }
 
 function ServiceInspector({
-  node, connectors, onPick, onNew, setCfg, onSave, testInput, setTestInput, testOut, onTest,
+  node, connectors, outEdges, onPatch, onPick, onNew, setCfg, onSave, testInput, setTestInput, testOut, onTest,
 }: {
-  node: ModelNode & { connectorId?: string };
+  node: ModelNode & { connectorId?: string; retries?: number; retryDelayMs?: number; timeoutMs?: number; onErrorEdgeId?: string };
   connectors: Connector[];
+  outEdges: { id: string; toName: string }[];
+  onPatch: (patch: Partial<ModelNode>) => void;
   onPick: (cid: string) => void;
   onNew: (type: string) => void;
   setCfg: (cid: string, key: string, val: any) => void;
@@ -514,6 +521,7 @@ function ServiceInspector({
   testOut: string; onTest: (id: string) => void;
 }) {
   const c = connectors.find((x) => x.id === node.connectorId);
+  const num = (v: string): any => (v.trim() === "" ? undefined : Math.max(0, Number(v) || 0));
   return (
     <div>
       <L>Connector</L>
@@ -582,6 +590,34 @@ function ServiceInspector({
           </div>
         </>
       )}
+
+      <div style={{ marginTop: 12, borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
+        <L>Reliability</L>
+        <p style={S.hint}>Retry a flaky connector, cap how long it may run, and choose where a final failure goes.</p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <L>Retries</L>
+            <input style={S.input} type="number" min={0} value={node.retries ?? ""} placeholder="0"
+              onChange={(e) => onPatch({ retries: num(e.target.value) } as any)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <L>Backoff (ms)</L>
+            <input style={S.input} type="number" min={0} value={node.retryDelayMs ?? ""} placeholder="500"
+              onChange={(e) => onPatch({ retryDelayMs: num(e.target.value) } as any)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <L>Timeout (ms)</L>
+            <input style={S.input} type="number" min={0} value={node.timeoutMs ?? ""} placeholder="none"
+              onChange={(e) => onPatch({ timeoutMs: num(e.target.value) } as any)} />
+          </div>
+        </div>
+        <L>On failure</L>
+        <select style={S.input} value={node.onErrorEdgeId ?? ""} onChange={(e) => onPatch({ onErrorEdgeId: e.target.value || undefined } as any)}>
+          <option value="">Fail the instance</option>
+          {outEdges.map((e) => <option key={e.id} value={e.id}>Route to → {e.toName}</option>)}
+        </select>
+        {node.onErrorEdgeId && <p style={S.hint}>On error, the run continues down this edge with the failure in <code>error</code>.</p>}
+      </div>
     </div>
   );
 }

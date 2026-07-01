@@ -29,7 +29,7 @@ import { listTemplates, installTemplate } from "./templates.js";
 import { describeProcess } from "./describe.js";
 import { generateWorkflow } from "./ai-build.js";
 import { runConnector, listMcpTools } from "./connectors.js";
-import { startInstance, submitTask } from "./runtime.js";
+import { startInstance, submitTask, retryInstance } from "./runtime.js";
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
@@ -313,6 +313,17 @@ app.get("/instances/:id", async (req) => {
 app.post("/definitions/:id/start", async (req) => {
   const { id } = req.params as { id: string };
   return startInstance(id);
+});
+
+// Re-run a failed instance from where it stopped (e.g. after a flaky dependency recovers).
+app.post("/instances/:id/retry", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  try {
+    const result = await retryInstance(id);
+    return { ok: true, result, instance: getInstance(id) };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
 });
 
 app.post("/tasks/:taskId/submit", async (req) => {

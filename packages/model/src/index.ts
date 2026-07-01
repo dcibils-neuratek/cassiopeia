@@ -55,6 +55,16 @@ export interface ServiceTaskNode {
   connectorId: string;
   inputMap?: Mapping;
   outputMap?: Mapping;
+  /** Retry policy for the connector call. */
+  retries?: number; // extra attempts after the first (0 = no retry)
+  retryDelayMs?: number; // base backoff; doubles each attempt
+  timeoutMs?: number; // abort a single attempt after this long (0 = no timeout)
+  /**
+   * Outgoing edge taken when the connector ultimately fails (after retries).
+   * When set, the failure is caught, `error` is written to the context, and the
+   * flow continues down this edge instead of failing the whole instance.
+   */
+  onErrorEdgeId?: string;
 }
 export interface GatewayBranch {
   edgeId: string;
@@ -108,6 +118,8 @@ export interface ProcessInstance {
   status: InstanceStatus;
   currentNodeId: string;
   context: Context;
+  /** Populated when status is "failed": the reason the run stopped. */
+  error?: string;
 }
 
 // ---- forms ----
