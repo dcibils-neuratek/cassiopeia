@@ -69,6 +69,9 @@ pnpm dev:web     # web only, on http://localhost:5173 (proxies /api -> :3001)
 
 ## Roadmap
 
+Per-milestone changelogs (functional + technical detail) live in
+[`changelog/`](changelog/README.md).
+
 - **M0/M1** ✅ scaffold + walking-skeleton engine (wait/resume, gateway, connectors, audit)
 - **M2** ✅ form-kit (`expr`-driven renderer, conditional visibility, validation) + portal
 - **M3** ✅ process designer (React Flow): palette, node/edge property panels, validation, publish versioned definitions
