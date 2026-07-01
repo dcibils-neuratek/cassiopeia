@@ -37,7 +37,7 @@ Turn human tasks into a real worklist.
 - User tasks carry `assignee` / `candidateRole` / `priority`.
 - A dedicated **Inbox** screen: filter, claim, open the form inline, complete — across all running instances.
 
-### M9 — Governance: versioning, import/export, data dictionary
+### M9 — Governance: versioning, import/export, data dictionary ✅
 Operate workflows over time.
 - **Version history** per process (list published versions, restore).
 - **Export / import** a workflow bundle (definition + forms + connectors) as JSON.

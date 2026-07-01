@@ -97,6 +97,13 @@ export function Designer({ defId }: { defId: string }) {
   const [chat, setChat] = useState<{ role: "user" | "agent"; text: string }[]>([
     { role: "agent", text: "Hi! Describe the workflow you want — e.g. \"a mortgage pre-approval that collects income and property value, runs an affordability check, then approves or asks for more info.\" I'll build it on the canvas, and you can keep refining." },
   ]);
+  // M9 governance
+  const [govOpen, setGovOpen] = useState(false);
+  const [govTab, setGovTab] = useState<"versions" | "data" | "import">("versions");
+  const [versions, setVersions] = useState<{ version: number; status: string; nodeCount: number; edgeCount: number }[]>([]);
+  const [dataDict, setDataDict] = useState<{ entries: { key: string; producedBy: string[]; consumedBy: string[] }[]; warnings: string[] } | null>(null);
+  const [importText, setImportText] = useState("");
+  const [govMsg, setGovMsg] = useState("");
 
   async function reloadForms() {
     const r = await api(`/forms`);
@@ -192,6 +199,41 @@ export function Designer({ defId }: { defId: string }) {
     if (publish && r.ok) { setErrors([]); setMsg(`Published v${r.data.version} ✓ — go to Run to try it`); }
     else if (publish) setErrors(r.data.errors ?? ["Publish failed"]);
     else { setErrors(r.data.errors ?? []); setMsg("Draft saved"); }
+  }
+
+  async function reloadCanvas() {
+    const r = await api(`/definitions/${DEF_ID}/edit`);
+    applyDef(r.data as ProcessDefinition);
+  }
+  async function exportWorkflow() {
+    await api(`/definitions/${DEF_ID}/draft`, { method: "POST", body: JSON.stringify(toDefinition()) });
+    const r = await api(`/definitions/${DEF_ID}/export`);
+    if (!r.ok) { setMsg("Export failed"); return; }
+    const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${DEF_ID}.cassiopeia.json`; a.click();
+    URL.revokeObjectURL(url);
+    setMsg("Exported workflow bundle (JSON)");
+  }
+  async function openGov() {
+    setGovMsg(""); setGovTab("versions"); setImportText("");
+    await api(`/definitions/${DEF_ID}/draft`, { method: "POST", body: JSON.stringify(toDefinition()) });
+    const [v, d] = await Promise.all([api(`/definitions/${DEF_ID}/versions`), api(`/definitions/${DEF_ID}/data-dictionary`)]);
+    setVersions(v.data); setDataDict(d.data);
+    setGovOpen(true);
+  }
+  async function restoreVersion(v: number) {
+    await api(`/definitions/${DEF_ID}/restore/${v}`, { method: "POST" });
+    await reloadCanvas();
+    setGovMsg(`Restored v${v} into the working draft`);
+  }
+  async function importWorkflow() {
+    let bundle: any;
+    try { bundle = JSON.parse(importText); } catch { setGovMsg("Invalid JSON"); return; }
+    const r = await api(`/definitions/import`, { method: "POST", body: JSON.stringify({ ...bundle, targetId: DEF_ID }) });
+    if (r.ok) { await reloadCanvas(); await reloadForms(); await reloadConnectors(); setGovMsg("Imported into this workflow ✓"); }
+    else setGovMsg(r.data?.error ?? "Import failed");
   }
 
   // Publish the current design, then open the Run modal so it reflects edits.
@@ -301,6 +343,8 @@ export function Designer({ defId }: { defId: string }) {
         <div style={{ flex: 1 }} />
         <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Build with AI</button>
         <button style={S.describe} onClick={openDescribe}>✦ Describe</button>
+        <button style={S.ghost} onClick={openGov}>Manage</button>
+        <button style={S.ghost} onClick={exportWorkflow}>Export</button>
         <button style={S.ghost} onClick={() => persist(false)}>Save draft</button>
         <button style={S.ghost} onClick={() => persist(true)}>Publish</button>
         <button style={S.run} onClick={publishAndRun}>▶ Run</button>
@@ -477,6 +521,74 @@ export function Designer({ defId }: { defId: string }) {
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
               <Portal defId={DEF_ID} autoStart />
+            </div>
+          </div>
+        </>
+      )}
+
+      {govOpen && (
+        <>
+          <div style={S.backdrop} onClick={() => setGovOpen(false)} />
+          <div style={{ ...S.modal, width: "min(860px, 94vw)", height: "auto", maxHeight: "88vh" }}>
+            <div style={S.modalHead}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Manage: {name}</span>
+              <button style={S.ghost} onClick={() => setGovOpen(false)}>Close</button>
+            </div>
+            <div style={{ padding: 20, overflowY: "auto" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                {(["versions", "data", "import"] as const).map((t) => (
+                  <button key={t} onClick={() => setGovTab(t)} style={govTab === t ? S.tabActive : S.tab}>
+                    {t === "versions" ? "Version history" : t === "data" ? "Data dictionary" : "Import"}
+                  </button>
+                ))}
+              </div>
+              {govMsg && <div style={S.okMsg}>{govMsg}</div>}
+
+              {govTab === "versions" && (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead><tr style={{ color: "#64748b", textAlign: "left" }}>
+                    <th style={S.gth}>Version</th><th style={S.gth}>Status</th><th style={S.gth}>Nodes</th><th style={S.gth}>Edges</th><th style={S.gth}></th>
+                  </tr></thead>
+                  <tbody>
+                    {versions.map((v) => (
+                      <tr key={v.version} style={{ borderTop: "1px solid #f1f5f9" }}>
+                        <td style={S.gtd}>v{v.version}</td><td style={S.gtd}>{v.status}</td><td style={S.gtd}>{v.nodeCount}</td><td style={S.gtd}>{v.edgeCount}</td>
+                        <td style={S.gtd}><button style={S.ghost} onClick={() => restoreVersion(v.version)}>Restore to draft</button></td>
+                      </tr>
+                    ))}
+                    {versions.length === 0 && <tr><td style={S.gtd} colSpan={5}>No published versions yet — publish to create v1.</td></tr>}
+                  </tbody>
+                </table>
+              )}
+
+              {govTab === "data" && dataDict && (
+                <>
+                  {dataDict.warnings.map((w, i) => <div key={i} style={S.warn}>⚠ {w}</div>)}
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead><tr style={{ color: "#64748b", textAlign: "left" }}>
+                      <th style={S.gth}>Context key</th><th style={S.gth}>Produced by</th><th style={S.gth}>Consumed by</th>
+                    </tr></thead>
+                    <tbody>
+                      {dataDict.entries.map((e) => (
+                        <tr key={e.key} style={{ borderTop: "1px solid #f1f5f9" }}>
+                          <td style={S.gtd}><code>{e.key}</code></td>
+                          <td style={S.gtd}>{e.producedBy.join(", ") || <span style={{ color: "#94a3b8" }}>—</span>}</td>
+                          <td style={S.gtd}>{e.consumedBy.join(", ") || <span style={{ color: "#94a3b8" }}>—</span>}</td>
+                        </tr>
+                      ))}
+                      {dataDict.entries.length === 0 && <tr><td style={S.gtd} colSpan={3}>No context keys yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {govTab === "import" && (
+                <>
+                  <p style={S.hint}>Paste a Cassiopeia workflow bundle (from Export). It imports into <b>{DEF_ID}</b> as a draft; existing connectors keep their keys.</p>
+                  <textarea style={{ ...S.input, height: 220, fontFamily: "monospace" }} placeholder='{"cassiopeia":"workflow-bundle", ...}' value={importText} onChange={(e) => setImportText(e.target.value)} />
+                  <button style={S.primary} onClick={importWorkflow}>Import bundle</button>
+                </>
+              )}
             </div>
           </div>
         </>
@@ -703,6 +815,12 @@ const S: Record<string, React.CSSProperties> = {
   check: { display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 13, color: "#334155" },
   danger: { marginTop: 16, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 13, cursor: "pointer", width: "100%" },
   pre: { background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: 12, overflowX: "auto", marginTop: 8 },
+  tab: { border: "1px solid #cbd5e1", background: "white", color: "#334155", borderRadius: 8, padding: "6px 12px", fontSize: 13, cursor: "pointer" },
+  tabActive: { border: "1px solid #2563eb", background: "#eff6ff", color: "#2563eb", borderRadius: 8, padding: "6px 12px", fontSize: 13, cursor: "pointer", fontWeight: 700 },
+  okMsg: { background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 12 },
+  warn: { background: "#fff7ed", color: "#9a3412", border: "1px solid #fed7aa", padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 8 },
+  gth: { padding: "8px 10px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 },
+  gtd: { padding: "8px 10px", color: "#0f172a", verticalAlign: "top" },
   backdrop: { position: "fixed", inset: 0, background: "rgba(15,23,42,0.35)", zIndex: 40 },
   drawer: { position: "fixed", top: 0, right: 0, height: "100vh", width: "min(1080px, 96vw)", background: "white", boxShadow: "-8px 0 24px rgba(0,0,0,0.15)", zIndex: 50, padding: 24, overflowY: "auto" },
   drawerHead: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #e2e8f0" },

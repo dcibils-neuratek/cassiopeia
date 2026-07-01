@@ -13,6 +13,7 @@ import {
   getInstance,
   getTask,
   initDb,
+  listDefinitionVersions,
   claimTask,
   listConnectors,
   listDefinitions,
@@ -33,6 +34,7 @@ import { describeProcess } from "./describe.js";
 import { generateWorkflow } from "./ai-build.js";
 import { runConnector, listMcpTools } from "./connectors.js";
 import { startInstance, submitTask, retryInstance, startScheduler } from "./runtime.js";
+import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBundle } from "./governance.js";
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
@@ -162,6 +164,56 @@ app.post("/definitions/:id/publish", async (req, reply) => {
   // keep editing the draft in sync with what was published
   saveDefinition({ ...candidate, version: 0, status: "draft" });
   return { ok: true, version: candidate.version };
+});
+
+// ---- M9 governance: version history, import/export, data dictionary ----
+
+app.get("/definitions/:id/versions", async (req) => {
+  const { id } = req.params as { id: string };
+  return listDefinitionVersions(id);
+});
+
+// Restore a published version back into the editable draft.
+app.post("/definitions/:id/restore/:version", async (req, reply) => {
+  const { id, version } = req.params as { id: string; version: string };
+  try {
+    const def = getDefinition(id, Number(version));
+    saveDefinition({ ...def, id, version: 0, status: "draft" });
+    return { ok: true };
+  } catch (err) {
+    return reply.code(404).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// Export a portable bundle (definition + referenced forms + connectors, secrets stripped).
+app.get("/definitions/:id/export", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  try {
+    return { ...exportBundle(id), exportedAt: new Date().toISOString() };
+  } catch (err) {
+    return reply.code(404).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// Import a bundle (as a new draft). Body: the bundle, optional { targetId }.
+app.post("/definitions/import", async (req, reply) => {
+  const body = (req.body ?? {}) as WorkflowBundle & { targetId?: string };
+  try {
+    const defId = importBundle(body, body.targetId);
+    return { ok: true, defId };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// The context-key contract for a process: produced vs consumed, with warnings.
+app.get("/definitions/:id/data-dictionary", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  try {
+    return dataDictionary(id);
+  } catch (err) {
+    return reply.code(404).send({ ok: false, error: (err as Error).message });
+  }
 });
 
 app.get("/forms", async () => listForms());
@@ -313,6 +365,14 @@ app.get("/instances/:id", async (req) => {
     openTimer: openTimerForInstance(id) ?? null,
     events: listEvents(id),
   };
+});
+
+// Audit trail as CSV (for compliance / spreadsheets).
+app.get("/instances/:id/audit.csv", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  reply.header("content-type", "text/csv; charset=utf-8");
+  reply.header("content-disposition", `attachment; filename="audit-${id.slice(0, 8)}.csv"`);
+  return auditCsv(id);
 });
 
 app.post("/definitions/:id/start", async (req) => {

@@ -115,7 +115,10 @@ export function Monitor() {
               </div>
             )}
             <pre style={S.pre}>{JSON.stringify(detail.instance.context, null, 2)}</pre>
-            <div style={{ ...S.head, marginTop: 14 }}>Audit trail</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
+              <div style={S.head}>Audit trail</div>
+              <a href={`/api/instances/${detail.instance.id}/audit.csv`} style={S.csvLink}>⬇ CSV</a>
+            </div>
             <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
               {detail.events.map((e, i) => (
                 <li key={i} style={{ fontFamily: "monospace", fontSize: 12 }}>
@@ -142,4 +145,5 @@ const S: Record<string, React.CSSProperties> = {
   timerBox: { background: "#ecfeff", border: "1px solid #a5f3fc", color: "#155e75", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
   dueBox: { background: "#f0f9ff", border: "1px solid #bae6fd", color: "#075985", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
   overdueBox: { background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
+  csvLink: { fontSize: 11, color: "var(--primary)", textDecoration: "none", fontWeight: 700 },
 };

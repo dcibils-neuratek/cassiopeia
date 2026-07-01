@@ -162,6 +162,17 @@ export function listDefinitions(): DefinitionSummary[] {
   });
 }
 
+/** Published version history (newest first), with node/edge counts for display. */
+export function listDefinitionVersions(id: string): { version: number; status: string; nodeCount: number; edgeCount: number }[] {
+  const rows = db
+    .prepare(`SELECT version, status, json FROM process_definitions WHERE id = ? AND version > 0 ORDER BY version DESC`)
+    .all(id) as { version: number; status: string; json: string }[];
+  return rows.map((r) => {
+    const d = JSON.parse(r.json) as ProcessDefinition;
+    return { version: r.version, status: r.status, nodeCount: d.nodes.length, edgeCount: d.edges.length };
+  });
+}
+
 /** Version 0 is the mutable working draft. Published versions are 1..N. */
 export function maxPublishedVersion(id: string): number {
   const row = db
