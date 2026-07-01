@@ -1,0 +1,19 @@
+{
+  "name": "cassiopeia",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node dev.mjs",
+    "dev": "node dev.mjs",
+    "demo": "pnpm --filter @cassiopeia/api demo",
+    "dev:api": "pnpm --filter @cassiopeia/api dev",
+    "dev:web": "pnpm --filter @cassiopeia/web dev",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

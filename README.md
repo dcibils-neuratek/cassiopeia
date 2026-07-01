@@ -1,0 +1,133 @@
+# Cassiopeia
+
+A process & form designer for the era of AI agents. Draw a business process
+(tasks, connectors, conditionals), attach forms to human tasks, and run it on a
+lightweight, durable BPM-style engine that dispatches to AI agents, APIs, and
+other connectors.
+
+Status: **MVP complete (M0–M5)** — you can visually design a process *and* its
+forms, configure connectors (including an AI agent), publish, run, and monitor
+it end-to-end. Service tasks call connectors (REST or an OpenAI-compatible AI
+agent), gateways route on the result, and the Monitor shows every instance's
+context and audit trail.
+
+## Stack
+
+- **Monorepo**: pnpm workspaces
+- **DB**: `node:sqlite` (built into Node ≥ 22 — no native build, no Postgres)
+- **Backend**: Node + TypeScript (Fastify), engine runs in-process
+- **Frontend**: React + TypeScript (Vite)
+- **No commercial dependencies** — everything is permissively licensed
+
+## Layout
+
+```
+packages/
+  model/    shared types (ProcessDefinition, Node, Instance) — THE contract
+  expr/     safe expression evaluator (gateways + later form logic), no eval
+  engine/   pure process engine (no I/O; connectors + audit injected)
+apps/
+  api/      Fastify server, SQLite repo, connector runner, runtime wiring
+  web/      React runner (throwaway; the real designer is M3)
+```
+
+## Run
+
+```bash
+pnpm install
+pnpm start       # starts API (:3001) + web (:5173) together — open http://localhost:5173
+```
+
+Then open **http://localhost:5173** and start in the **Build** tab. Ctrl-C stops both.
+
+Other commands:
+
+```bash
+pnpm demo        # run the onboarding flow (both branches) in-process, print the trace
+pnpm dev:api     # API only, on http://localhost:3001
+pnpm dev:web     # web only, on http://localhost:5173 (proxies /api -> :3001)
+```
+
+## Design decisions
+
+- **Custom TS engine + React Flow** (not BPMN, not Temporal) — full control,
+  AI-native node types.
+- **Own form layer** (SurveyJS-inspired, not adopted — it's commercially
+  licensed) built on MIT deps (dnd-kit, react-hook-form, zod, jsep).
+- **Single-tenant / on-prem** target (bank compliance): self-hosted, no
+  mandatory external egress.
+
+### MVP simplifications (none are dead-ends)
+
+| Concern | MVP | Later |
+| --- | --- | --- |
+| DB | SQLite via thin repo | Postgres via Drizzle (repo isolates SQL) |
+| Engine host | in-process | extract to worker + queue |
+| Connectors | synchronous | async with callbacks (interface already allows) |
+| Tokens | single active node | parallel gateways |
+| Auth | none | OIDC/SAML |
+
+## Roadmap
+
+- **M0/M1** ✅ scaffold + walking-skeleton engine (wait/resume, gateway, connectors, audit)
+- **M2** ✅ form-kit (`expr`-driven renderer, conditional visibility, validation) + portal
+- **M3** ✅ process designer (React Flow): palette, node/edge property panels, validation, publish versioned definitions
+- **M4** ✅ form designer (dnd-kit): field palette, per-field properties, drag reorder, live preview via the shared renderer, save
+- **M5** ✅ connectors (HTTP + provider-neutral OpenAI-compatible AI Agent), connector admin + test, instance monitor → full demo
+
+## Workflow templates
+
+The **Templates** tab is a gallery of ready-made banking workflows. Each card
+explains what it teaches and how it's built; "Use this template" installs its
+process, forms, and connectors and drops you into **Build** to see the wiring:
+
+- **New Client Onboarding** — form → AI-agent verification → risk gateway → auto-open or manual review
+- **Mortgage Simulator** — request → compute payment/affordability → offer or adjust
+- **Personal Credit Request** — application → credit score → instant approval or underwriting
+- **Card Travel Notification** — trip details → register with the card network → confirm
+
+Templates run out of the box on deterministic mock connectors (`mock-mortgage`,
+`mock-credit-score`, `mock-travel-register`) — swap any for a real API or the AI
+agent connector.
+
+## UI: one connected Studio
+
+The app is organized as a platform with a sectioned sidebar:
+
+- **Overview** — **Home** (stat cards + your workflows with quick Build/Run, **auto-refreshing**) and **Stats** (runs by status, a **14-day throughput chart** of started vs completed, per-workflow breakdown, recent runs; **live**, backed by `GET /stats`).
+- **Workflow** — **Templates → Build → Run → Monitor**. Monitor has a **per-workflow filter** and refreshes live (the open instance detail updates too).
+- **Settings** — LLM API keys (the description model) and a **connector library** to configure/test AI-agent, Maverick, and HTTP connectors (and their keys) once, reused across workflows.
+
+Build is
+canvas-centric — the process is the center of gravity and everything attaches to it:
+
+- Each node shows its status inline (📝 form attached / ⚙ connector).
+- Select a **User Task** → attach and **design its form in a side drawer**, without leaving the flow (same renderer the portal uses).
+- Select a **Service Task** → pick, configure, and **test its connector inline** (REST or AI agent).
+- Select a **gateway edge** → set its condition.
+- **▶ Run** in the Build toolbar publishes and opens a large **modal** that runs the process right there — no navigating away.
+- **✦ Describe** generates an LLM-written, plain-language functional description of the flow (reads the tasks, forms, connectors, and gateway conditions). Defaults to **Claude Haiku** via Anthropic's OpenAI-compatible endpoint; the model, base URL, and API key are editable in the panel and work with any OpenAI-compatible provider. Configuration is stored in the `describer` connector.
+- An empty-state checklist guides first-time building.
+
+The chrome follows a Neuratek-style design system (left sidebar, blue accent, soft
+background, Inter, rounded white cards) defined by CSS variables in `apps/web/src/index.css`.
+
+## Maverick Agents connector
+
+`maverick-agent` is a native REST connector for calling Maverick agents from a
+service task. Configure `baseUrl`, `apiKey`, and `agentId`; it POSTs
+`{ input }` to `{baseUrl}/agents/{agentId}/invoke` with a Bearer token and
+merges the agent's `output`/`result` into the process context. Add one from the
+Service Task inspector with **+ Maverick**. A local `/mock-maverick/...`
+endpoint lets you exercise it without a real Maverick instance.
+
+## AI Agent connector
+
+The AI Agent connector (`ai-agent`) is **provider-neutral** — it calls any
+OpenAI-compatible `/chat/completions` endpoint with a user-supplied
+`baseUrl` + `apiKey` + `model`. Point it at Anthropic's OpenAI-compatible
+endpoint (`https://api.anthropic.com/v1`, e.g. `claude-sonnet-5`) or any other
+OpenAI-compatible provider. With `jsonOutput` on, the model's JSON response is
+merged straight into the process context, so gateways can route on it. A local
+mock LLM endpoint (`/mock-llm/chat/completions`) lets you exercise the whole
+path without credentials.

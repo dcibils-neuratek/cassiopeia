@@ -1,0 +1,241 @@
+// The process engine — PURE logic. No DB, no network. All I/O (running a
+// connector) is injected via EngineDeps so the routing logic stays unit-
+// testable without infrastructure. This is the highest-risk component, so it
+// lives on its own with no side effects.
+
+import {
+  type Context,
+  type Json,
+  type Mapping,
+  type ProcessDefinition,
+  type ProcessInstance,
+  type UserTaskNode,
+  edgeById,
+  getNode,
+  outgoingEdges,
+} from "@cassiopeia/model";
+import { evalBool } from "@cassiopeia/expr";
+
+export interface EngineEvent {
+  type:
+    | "instance.started"
+    | "node.entered"
+    | "task.created"
+    | "task.completed"
+    | "service.completed"
+    | "gateway.evaluated"
+    | "instance.completed";
+  nodeId?: string;
+  payload?: Json;
+}
+
+export interface EngineDeps {
+  /** Execute a connector and return its result. The only I/O the engine does. */
+  runConnector(connectorId: string, input: Context): Promise<Context>;
+  /** Append an event to the audit log. */
+  emit(event: EngineEvent): void;
+}
+
+export type AdvanceResult =
+  | { status: "waiting"; task: UserTaskNode }
+  | { status: "completed" }
+  | { status: "failed"; error: string };
+
+/**
+ * Structural validation of a definition. Returned to the designer and enforced
+ * at publish time so a broken flow can't be deployed. Pure — no I/O.
+ */
+export function validateDefinition(def: ProcessDefinition): string[] {
+  const errors: string[] = [];
+  const ids = new Set(def.nodes.map((n) => n.id));
+
+  const start = def.nodes.find((n) => n.id === def.startNodeId);
+  if (!start) errors.push(`Start node '${def.startNodeId}' does not exist`);
+  else if (start.type !== "start") errors.push(`Start node must be of type 'start'`);
+  if (!def.nodes.some((n) => n.type === "end")) errors.push(`Flow has no end node`);
+
+  for (const e of def.edges) {
+    if (!ids.has(e.from)) errors.push(`Edge ${e.id} starts at missing node '${e.from}'`);
+    if (!ids.has(e.to)) errors.push(`Edge ${e.id} ends at missing node '${e.to}'`);
+  }
+
+  for (const node of def.nodes) {
+    const out = outgoingEdges(def, node.id);
+    switch (node.type) {
+      case "end":
+        break;
+      case "gateway": {
+        if (out.length < 1) errors.push(`Gateway '${node.name}' needs at least one outgoing edge`);
+        const outIds = new Set(out.map((e) => e.id));
+        if (!outIds.has(node.defaultEdgeId))
+          errors.push(`Gateway '${node.name}' default edge is not one of its outgoing edges`);
+        for (const b of node.branches)
+          if (!outIds.has(b.edgeId))
+            errors.push(`Gateway '${node.name}' branch references a non-outgoing edge`);
+        break;
+      }
+      case "serviceTask":
+        if (!node.connectorId) errors.push(`Service task '${node.name}' has no connector`);
+        if (out.length !== 1) errors.push(`Service task '${node.name}' must have exactly one outgoing edge`);
+        break;
+      case "userTask":
+        if (out.length !== 1) errors.push(`User task '${node.name}' must have exactly one outgoing edge`);
+        break;
+      case "start":
+        if (out.length !== 1) errors.push(`Start must have exactly one outgoing edge`);
+        break;
+    }
+  }
+  return errors;
+}
+
+// ---- context read/write helpers (dotted paths) ----
+
+function getPath(ctx: Context, path: string): Json {
+  let cur: Json = ctx;
+  for (const part of path.split(".")) {
+    if (cur == null || typeof cur !== "object" || Array.isArray(cur)) return null;
+    cur = (cur as Record<string, Json>)[part] ?? null;
+  }
+  return cur;
+}
+
+function setPath(ctx: Context, path: string, value: Json): void {
+  const parts = path.split(".");
+  let cur: Record<string, Json> = ctx;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    const nx = cur[key];
+    if (nx == null || typeof nx !== "object" || Array.isArray(nx)) {
+      cur[key] = {};
+    }
+    cur = cur[key] as Record<string, Json>;
+  }
+  cur[parts[parts.length - 1]] = value;
+}
+
+/** Build a connector input. No map => send the whole context. */
+function applyInputMap(ctx: Context, map?: Mapping): Context {
+  if (!map) return { ...ctx };
+  const out: Context = {};
+  for (const [inputKey, path] of Object.entries(map)) {
+    out[inputKey] = getPath(ctx, path);
+  }
+  return out;
+}
+
+/** Merge a result into the context. No map => shallow-merge whole result. */
+function applyOutputMap(ctx: Context, result: Context, map?: Mapping): void {
+  if (!map) {
+    for (const [k, v] of Object.entries(result)) ctx[k] = v;
+    return;
+  }
+  for (const [targetPath, resultKey] of Object.entries(map)) {
+    setPath(ctx, targetPath, result[resultKey] ?? null);
+  }
+}
+
+function singleNext(def: ProcessDefinition, nodeId: string): string {
+  const edges = outgoingEdges(def, nodeId);
+  if (edges.length !== 1) {
+    throw new Error(
+      `Node ${nodeId} must have exactly one outgoing edge (found ${edges.length})`,
+    );
+  }
+  return edges[0].to;
+}
+
+/**
+ * Run the instance forward from its current node until it either parks at a
+ * user task (the only wait state in the MVP) or reaches an end node. Mutates
+ * instance.context, instance.currentNodeId and instance.status.
+ */
+export async function advance(
+  def: ProcessDefinition,
+  instance: ProcessInstance,
+  deps: EngineDeps,
+): Promise<AdvanceResult> {
+  try {
+    instance.status = "running";
+    for (;;) {
+      const node = getNode(def, instance.currentNodeId);
+      deps.emit({ type: "node.entered", nodeId: node.id });
+
+      switch (node.type) {
+        case "start": {
+          instance.currentNodeId = singleNext(def, node.id);
+          break;
+        }
+        case "userTask": {
+          instance.status = "waiting";
+          deps.emit({ type: "task.created", nodeId: node.id });
+          return { status: "waiting", task: node };
+        }
+        case "serviceTask": {
+          const input = applyInputMap(instance.context, node.inputMap);
+          const result = await deps.runConnector(node.connectorId, input);
+          applyOutputMap(instance.context, result, node.outputMap);
+          deps.emit({
+            type: "service.completed",
+            nodeId: node.id,
+            payload: result as Json,
+          });
+          instance.currentNodeId = singleNext(def, node.id);
+          break;
+        }
+        case "gateway": {
+          let chosen = node.defaultEdgeId;
+          for (const branch of node.branches) {
+            if (evalBool(branch.when, instance.context)) {
+              chosen = branch.edgeId;
+              break;
+            }
+          }
+          const edge = edgeById(def, chosen);
+          deps.emit({
+            type: "gateway.evaluated",
+            nodeId: node.id,
+            payload: { edge: edge.id, to: edge.to },
+          });
+          instance.currentNodeId = edge.to;
+          break;
+        }
+        case "end": {
+          instance.status = "completed";
+          deps.emit({ type: "instance.completed", nodeId: node.id });
+          return { status: "completed" };
+        }
+      }
+    }
+  } catch (err) {
+    instance.status = "failed";
+    return { status: "failed", error: (err as Error).message };
+  }
+}
+
+/**
+ * Resume a parked instance by completing its current user task with submitted
+ * form data, then advancing again.
+ */
+export async function completeTask(
+  def: ProcessDefinition,
+  instance: ProcessInstance,
+  taskNodeId: string,
+  formData: Context,
+  deps: EngineDeps,
+): Promise<AdvanceResult> {
+  const node = getNode(def, taskNodeId);
+  if (node.type !== "userTask") {
+    return { status: "failed", error: `Node ${taskNodeId} is not a user task` };
+  }
+  if (instance.currentNodeId !== taskNodeId) {
+    return {
+      status: "failed",
+      error: `Instance is not waiting at ${taskNodeId} (at ${instance.currentNodeId})`,
+    };
+  }
+  applyOutputMap(instance.context, formData, node.outputMap);
+  deps.emit({ type: "task.completed", nodeId: node.id, payload: formData as Json });
+  instance.currentNodeId = singleNext(def, node.id);
+  return advance(def, instance, deps);
+}

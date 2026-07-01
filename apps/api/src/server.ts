@@ -1,0 +1,240 @@
+// Minimal HTTP surface for the MVP. The engine runs in-process; these handlers
+// just call the runtime. CORS is open for local dev with the Vite web app.
+
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import type { FormDefinition, ProcessDefinition } from "@cassiopeia/model";
+import { validateDefinition } from "@cassiopeia/engine";
+import {
+  getDefinition,
+  getEditableDefinition,
+  eventDailyCounts,
+  getForm,
+  getInstance,
+  getTask,
+  initDb,
+  listConnectors,
+  listDefinitions,
+  listEvents,
+  listForms,
+  listInstances,
+  maxPublishedVersion,
+  openTaskForInstance,
+  saveConnector,
+  saveDefinition,
+  saveForm,
+} from "./db.js";
+import { seedSample } from "./sample.js";
+import { listTemplates, installTemplate } from "./templates.js";
+import { describeProcess } from "./describe.js";
+import { runConnector } from "./connectors.js";
+import { startInstance, submitTask } from "./runtime.js";
+
+const app = Fastify({ logger: true });
+await app.register(cors, { origin: true });
+
+initDb();
+seedSample();
+
+app.get("/health", async () => ({ ok: true }));
+
+// Aggregate metrics for the Home and Stats screens.
+app.get("/stats", async () => {
+  const instances = listInstances();
+  const defs = listDefinitions();
+  const blank = () => ({ running: 0, waiting: 0, completed: 0, failed: 0 } as Record<string, number>);
+  const byStatus = blank();
+  const per: Record<string, { total: number; byStatus: Record<string, number> }> = {};
+  for (const i of instances) {
+    byStatus[i.status] = (byStatus[i.status] ?? 0) + 1;
+    const p = (per[i.defId] ??= { total: 0, byStatus: blank() });
+    p.total++;
+    p.byStatus[i.status] = (p.byStatus[i.status] ?? 0) + 1;
+  }
+  // 14-day throughput from the event log (started vs completed per day).
+  const counts = eventDailyCounts();
+  const byDay: Record<string, { started: number; completed: number }> = {};
+  for (const c of counts) {
+    (byDay[c.day] ??= { started: 0, completed: 0 });
+    if (c.type === "instance.started") byDay[c.day].started = c.n;
+    else if (c.type === "instance.completed") byDay[c.day].completed = c.n;
+  }
+  const timeline: { date: string; started: number; completed: number }[] = [];
+  const today = new Date();
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    timeline.push({ date: key, started: byDay[key]?.started ?? 0, completed: byDay[key]?.completed ?? 0 });
+  }
+
+  return {
+    processes: defs.length,
+    instances: instances.length,
+    byStatus,
+    perProcess: defs.map((d) => ({ id: d.id, name: d.name, total: per[d.id]?.total ?? 0, byStatus: per[d.id]?.byStatus ?? blank() })),
+    recent: instances.slice(-10).reverse().map((i) => ({ id: i.id, defId: i.defId, status: i.status, currentNodeId: i.currentNodeId })),
+    timeline,
+  };
+});
+
+app.get("/templates", async () => listTemplates());
+
+app.post("/templates/:id/install", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  try {
+    return { ok: true, defId: installTemplate(id) };
+  } catch (err) {
+    return reply.code(404).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.get("/definitions", async () => listDefinitions());
+
+app.get("/definitions/:id", async (req) => {
+  const { id } = req.params as { id: string };
+  return getDefinition(id);
+});
+
+// LLM-generated functional description of a process. Optional {baseUrl, apiKey,
+// model} in the body override the seeded `describer` connector for this call.
+app.post("/definitions/:id/describe", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const override = (req.body ?? {}) as { baseUrl?: string; apiKey?: string; model?: string };
+  try {
+    return { ok: true, description: await describeProcess(id, override) };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// What the designer loads to edit (draft if present, else latest published).
+app.get("/definitions/:id/edit", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const def = getEditableDefinition(id);
+  if (!def) return reply.code(404).send({ error: "not found" });
+  return def;
+});
+
+// Save the working draft (version 0).
+app.post("/definitions/:id/draft", async (req) => {
+  const { id } = req.params as { id: string };
+  const body = req.body as ProcessDefinition;
+  const draft: ProcessDefinition = { ...body, id, version: 0, status: "draft" };
+  saveDefinition(draft);
+  return { ok: true, errors: validateDefinition(draft) };
+});
+
+// Publish: refuse if invalid; otherwise store as the next published version.
+app.post("/definitions/:id/publish", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const body = req.body as ProcessDefinition;
+  const candidate: ProcessDefinition = { ...body, id, status: "published" };
+  const errors = validateDefinition(candidate);
+  if (errors.length > 0) return reply.code(400).send({ ok: false, errors });
+  candidate.version = maxPublishedVersion(id) + 1;
+  saveDefinition(candidate);
+  // keep editing the draft in sync with what was published
+  saveDefinition({ ...candidate, version: 0, status: "draft" });
+  return { ok: true, version: candidate.version };
+});
+
+app.get("/forms", async () => listForms());
+app.get("/connectors", async () => listConnectors());
+
+app.post("/connectors", async (req) => {
+  const body = req.body as { id: string; type: string; config: Record<string, unknown> };
+  saveConnector({ id: body.id, type: body.type, config: body.config ?? {} });
+  return { ok: true };
+});
+
+// Test a connector with sample input (used by the admin "Test" button).
+app.post("/connectors/:id/test", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const input = (req.body ?? {}) as Record<string, never>;
+  try {
+    const output = await runConnector(id, input);
+    return { ok: true, output };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// A local stand-in for a Maverick agent so the maverick-agent connector can be
+// exercised without a real Maverick instance. Echoes the input under `output`.
+app.post("/mock-maverick/agents/:agentId/invoke", async (req) => {
+  const { agentId } = req.params as { agentId: string };
+  const body = (req.body ?? {}) as { input?: Record<string, unknown> };
+  return {
+    output: {
+      agent: agentId,
+      handled: true,
+      ...(body.input ?? {}),
+      maverickNote: `handled by ${agentId}`,
+    },
+  };
+});
+
+// A local OpenAI-compatible endpoint so the AI Agent connector can be exercised
+// end-to-end without real credentials. Echoes a deterministic JSON "decision".
+app.post("/mock-llm/chat/completions", async (req) => {
+  const body = req.body as { messages?: { role: string; content: string }[] };
+  const userMsg = [...(body.messages ?? [])].reverse().find((m) => m.role === "user");
+  let income = 0;
+  try {
+    const parsed = JSON.parse(userMsg?.content ?? "{}");
+    if (typeof parsed.income === "number") income = parsed.income;
+  } catch {
+    /* ignore */
+  }
+  const decision = { riskScore: income >= 5000 ? 0.2 : 0.9, verified: true, reviewedBy: "mock-llm" };
+  return {
+    id: "chatcmpl-mock",
+    object: "chat.completion",
+    choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(decision) }, finish_reason: "stop" }],
+  };
+});
+
+app.get("/forms/:id", async (req) => {
+  const { id } = req.params as { id: string };
+  return getForm(id);
+});
+
+// Save a form (MVP: overwrite at version 1; the portal resolves the latest).
+app.post("/forms/:id", async (req) => {
+  const { id } = req.params as { id: string };
+  const body = req.body as FormDefinition;
+  const form: FormDefinition = { ...body, id, version: 1 };
+  saveForm(form);
+  return { ok: true };
+});
+
+app.get("/instances", async () => listInstances());
+
+app.get("/instances/:id", async (req) => {
+  const { id } = req.params as { id: string };
+  const instance = getInstance(id);
+  return {
+    instance,
+    openTask: openTaskForInstance(id) ?? null,
+    events: listEvents(id),
+  };
+});
+
+app.post("/definitions/:id/start", async (req) => {
+  const { id } = req.params as { id: string };
+  return startInstance(id);
+});
+
+app.post("/tasks/:taskId/submit", async (req) => {
+  const { taskId } = req.params as { taskId: string };
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const result = await submitTask(taskId, body as Record<string, never>);
+  const task = getTask(taskId);
+  return { result, instance: getInstance(task.instanceId) };
+});
+
+const port = Number(process.env.PORT ?? 3001);
+app.listen({ port, host: "0.0.0.0" }).then(() => {
+  app.log.info(`Cassiopeia API on http://localhost:${port}`);
+});
