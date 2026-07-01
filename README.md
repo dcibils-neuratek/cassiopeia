@@ -106,6 +106,7 @@ canvas-centric — the process is the center of gravity and everything attaches 
 - Select a **Service Task** → pick, configure, and **test its connector inline** (REST or AI agent).
 - Select a **gateway edge** → set its condition.
 - **▶ Run** in the Build toolbar publishes and opens a large **modal** that runs the process right there — no navigating away.
+- **✦ Build with AI** opens a chat where you describe a workflow in plain language and the agent generates the tasks, gateways (with conditions), connectors, and forms directly on the canvas — and keeps refining it conversationally (it's sent the current design each turn). Uses the same configured LLM as Describe. Endpoint: `POST /definitions/:id/ai-build`; generation logic in `apps/api/src/ai-build.ts`.
 - **✦ Describe** generates an LLM-written, plain-language functional description of the flow (reads the tasks, forms, connectors, and gateway conditions). Defaults to **Claude Haiku** via Anthropic's OpenAI-compatible endpoint; the model, base URL, and API key are editable in the panel and work with any OpenAI-compatible provider. Configuration is stored in the `describer` connector.
 - An empty-state checklist guides first-time building.
 

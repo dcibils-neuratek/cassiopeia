@@ -70,7 +70,7 @@ export async function describeProcess(
 
   let cfg: Record<string, any> = { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5", apiKey: "" };
   try { cfg = { ...cfg, ...getConnector("describer").config }; } catch { /* not seeded */ }
-  cfg = { ...cfg, ...(override ?? {}) };
+  for (const [k, v] of Object.entries(override ?? {})) if (v != null && v !== "") cfg[k] = v;
   if (!cfg.apiKey) throw new Error("No API key set for the description model. Add it in the Describe panel.");
 
   const res = await fetch(`${String(cfg.baseUrl).replace(/\/+$/, "")}/chat/completions`, {

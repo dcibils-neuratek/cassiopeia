@@ -88,6 +88,12 @@ export function Designer({ defId }: { defId: string }) {
   const [description, setDescription] = useState("");
   const [descBusy, setDescBusy] = useState(false);
   const [descErr, setDescErr] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInput, setAiInput] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [chat, setChat] = useState<{ role: "user" | "agent"; text: string }[]>([
+    { role: "agent", text: "Hi! Describe the workflow you want — e.g. \"a mortgage pre-approval that collects income and property value, runs an affordability check, then approves or asks for more info.\" I'll build it on the canvas, and you can keep refining." },
+  ]);
 
   async function reloadForms() {
     const r = await api(`/forms`);
@@ -98,20 +104,24 @@ export function Designer({ defId }: { defId: string }) {
     setConnectors(r.data);
   }
 
+  function applyDef(def: ProcessDefinition) {
+    setName(def.name);
+    setNodes(def.nodes.map((n) => ({ id: n.id, type: "cass", position: def.layout?.[n.id] ?? { x: 0, y: 0 }, data: { node: n } })));
+    setEdges(def.edges.map((e) => {
+      const gw = def.nodes.find((x) => x.id === e.from && x.type === "gateway") as GatewayNode | undefined;
+      const isDefault = gw?.defaultEdgeId === e.id;
+      const when = gw?.branches.find((b) => b.edgeId === e.id)?.when;
+      return { id: e.id, source: e.from, target: e.to, markerEnd: { type: MarkerType.ArrowClosed }, label: isDefault ? "default" : when ?? "", data: { when, isDefault } };
+    }));
+    setSel(null);
+  }
+
   useEffect(() => {
     (async () => {
       const defRes = await api(`/definitions/${DEF_ID}/edit`);
       await reloadForms();
       await reloadConnectors();
-      const def = defRes.data as ProcessDefinition;
-      setName(def.name);
-      setNodes(def.nodes.map((n) => ({ id: n.id, type: "cass", position: def.layout?.[n.id] ?? { x: 0, y: 0 }, data: { node: n } })));
-      setEdges(def.edges.map((e) => {
-        const gw = def.nodes.find((x) => x.id === e.from && x.type === "gateway") as GatewayNode | undefined;
-        const isDefault = gw?.defaultEdgeId === e.id;
-        const when = gw?.branches.find((b) => b.edgeId === e.id)?.when;
-        return { id: e.id, source: e.from, target: e.to, markerEnd: { type: MarkerType.ArrowClosed }, label: isDefault ? "default" : when ?? "", data: { when, isDefault } };
-      }));
+      applyDef(defRes.data as ProcessDefinition);
     })();
   }, []);
 
@@ -209,6 +219,29 @@ export function Designer({ defId }: { defId: string }) {
     else setDescErr(r.data.error ?? "Failed to generate description");
   }
 
+  // ---- AI workflow builder (chat) ----
+  async function sendAi() {
+    const instruction = aiInput.trim();
+    if (!instruction || aiBusy) return;
+    setChat((c) => [...c, { role: "user", text: instruction }]);
+    setAiInput("");
+    setAiBusy(true);
+    const r = await api(`/definitions/${DEF_ID}/ai-build`, {
+      method: "POST",
+      body: JSON.stringify({ instruction, current: toDefinition() }),
+    });
+    setAiBusy(false);
+    if (r.ok) {
+      applyDef(r.data.definition as ProcessDefinition);
+      await reloadForms();
+      const errs = (r.data.errors ?? []) as string[];
+      const note = errs.length ? `\n\n⚠ Needs a fix before publishing: ${errs.join("; ")}` : "";
+      setChat((c) => [...c, { role: "agent", text: (r.data.reply || "Done.") + note }]);
+    } else {
+      setChat((c) => [...c, { role: "agent", text: `Sorry — ${r.data.error ?? "something went wrong."}` }]);
+    }
+  }
+
   // ---- forms attached to a user task ----
   async function createFormForTask(node: ModelNode & { name?: string }) {
     const id = `form_${uid()}`;
@@ -258,6 +291,7 @@ export function Designer({ defId }: { defId: string }) {
           <button key={t} style={S.paletteBtn} onClick={() => addNode(t)}>+ {t}</button>
         ))}
         <div style={{ flex: 1 }} />
+        <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Build with AI</button>
         <button style={S.describe} onClick={openDescribe}>✦ Describe</button>
         <button style={S.ghost} onClick={() => persist(false)}>Save draft</button>
         <button style={S.ghost} onClick={() => persist(true)}>Publish</button>
@@ -387,6 +421,33 @@ export function Designer({ defId }: { defId: string }) {
             </div>
           </div>
         </>
+      )}
+
+      {aiOpen && (
+        <div style={S.aiDrawer}>
+          <div style={S.drawerHead}>
+            <span style={{ fontWeight: 700 }}>✦ Build with AI</span>
+            <button style={S.ghost} onClick={() => setAiOpen(false)}>Close</button>
+          </div>
+          <div style={S.chatScroll}>
+            {chat.map((m, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                <div style={m.role === "user" ? S.bubbleUser : S.bubbleAgent}>{m.text}</div>
+              </div>
+            ))}
+            {aiBusy && <div style={{ ...S.bubbleAgent, color: "#64748b" }}>Designing the workflow…</div>}
+          </div>
+          <div style={S.chatInputRow}>
+            <textarea
+              style={S.chatInput}
+              placeholder="Describe or change the workflow…"
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }}
+            />
+            <button style={S.primary} disabled={aiBusy} onClick={sendAi}>Send</button>
+          </div>
+        </div>
       )}
 
       {descOpen && (
@@ -520,6 +581,13 @@ const S: Record<string, React.CSSProperties> = {
   ghost: { background: "white", color: "#2563eb", border: "1px solid #2563eb", borderRadius: 8, padding: "8px 12px", fontSize: 13, cursor: "pointer" },
   run: { background: "#16a34a", color: "white", border: 0, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   describe: { background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  aiBtn: { background: "#4338ca", color: "white", border: 0, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  aiDrawer: { position: "fixed", top: 0, right: 0, height: "100vh", width: 380, maxWidth: "92vw", background: "white", boxShadow: "-8px 0 24px rgba(0,0,0,0.15)", zIndex: 50, display: "flex", flexDirection: "column", padding: 16 },
+  chatScroll: { flex: 1, overflowY: "auto", padding: "12px 2px" },
+  bubbleUser: { background: "#4338ca", color: "white", borderRadius: "12px 12px 2px 12px", padding: "8px 12px", fontSize: 13, maxWidth: "85%", whiteSpace: "pre-wrap" },
+  bubbleAgent: { background: "#f1f5f9", color: "#0f172a", borderRadius: "12px 12px 12px 2px", padding: "8px 12px", fontSize: 13, maxWidth: "90%", whiteSpace: "pre-wrap" },
+  chatInputRow: { display: "flex", gap: 8, alignItems: "flex-end", borderTop: "1px solid #e2e8f0", paddingTop: 10 },
+  chatInput: { flex: 1, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 13, resize: "none", height: 52, fontFamily: "inherit" },
   descSettings: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 },
   descBox: { marginTop: 16, background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 16, fontSize: 14, color: "#0f172a" },
   okBar: { marginTop: 10, background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13 },

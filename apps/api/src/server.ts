@@ -27,6 +27,7 @@ import {
 import { seedSample } from "./sample.js";
 import { listTemplates, installTemplate } from "./templates.js";
 import { describeProcess } from "./describe.js";
+import { generateWorkflow } from "./ai-build.js";
 import { runConnector } from "./connectors.js";
 import { startInstance, submitTask } from "./runtime.js";
 
@@ -108,6 +109,25 @@ app.post("/definitions/:id/describe", async (req, reply) => {
   }
 });
 
+// Prompt-to-workflow: build/edit a process from a natural-language instruction.
+// Persists any generated forms + saves the result as the editable draft so the
+// canvas can load it. Body: { instruction, current?, baseUrl?, apiKey?, model? }.
+app.post("/definitions/:id/ai-build", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const b = (req.body ?? {}) as { instruction?: string; current?: ProcessDefinition; baseUrl?: string; apiKey?: string; model?: string };
+  if (!b.instruction) return reply.code(400).send({ ok: false, error: "instruction is required" });
+  try {
+    const connectorIds = listConnectors().map((c) => c.id);
+    const out = await generateWorkflow(b.instruction, b.current, connectorIds, { baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model });
+    const def: ProcessDefinition = { ...out.definition, id };
+    for (const f of out.forms) saveForm(f);
+    saveDefinition({ ...def, version: 0, status: "draft" });
+    return { ok: true, reply: out.reply, definition: def, errors: out.errors };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
 // What the designer loads to edit (draft if present, else latest published).
 app.get("/definitions/:id/edit", async (req, reply) => {
   const { id } = req.params as { id: string };
@@ -179,6 +199,39 @@ app.post("/mock-maverick/agents/:agentId/invoke", async (req) => {
 // end-to-end without real credentials. Echoes a deterministic JSON "decision".
 app.post("/mock-llm/chat/completions", async (req) => {
   const body = req.body as { messages?: { role: string; content: string }[] };
+  const system = body.messages?.find((m) => m.role === "system")?.content ?? "";
+
+  // Workflow-builder prompt → return a sample workflow JSON.
+  if (system.includes("Cassiopeia workflow builder")) {
+    const workflow = {
+      reply: "Built a personal loan pre-approval: collect the applicant's details, run a check, then approve or route to manual review.",
+      name: "Loan Pre-Approval",
+      nodes: [
+        { id: "start", type: "start" },
+        { id: "collect", type: "userTask", name: "Loan Details", form: { title: "Loan Details", fields: [
+          { kind: "text", label: "Full name", required: true },
+          { kind: "number", label: "Annual income", required: true },
+          { kind: "number", label: "Amount requested", required: true },
+        ] } },
+        { id: "check", type: "serviceTask", name: "Verify Applicant", connector: "verify-docs" },
+        { id: "decide", type: "gateway", name: "Approved?" },
+        { id: "sign", type: "userTask", name: "Sign Offer" },
+        { id: "review", type: "userTask", name: "Manual Review" },
+        { id: "end", type: "end" },
+      ],
+      edges: [
+        { from: "start", to: "collect" },
+        { from: "collect", to: "check" },
+        { from: "check", to: "decide" },
+        { from: "decide", to: "sign", when: "riskScore < 0.5" },
+        { from: "decide", to: "review" },
+        { from: "sign", to: "end" },
+        { from: "review", to: "end" },
+      ],
+    };
+    return { id: "chatcmpl-mock", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(workflow) }, finish_reason: "stop" }] };
+  }
+
   const userMsg = [...(body.messages ?? [])].reverse().find((m) => m.role === "user");
   let income = 0;
   try {
