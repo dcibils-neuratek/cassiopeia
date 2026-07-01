@@ -113,6 +113,15 @@ canvas-centric — the process is the center of gravity and everything attaches 
 The chrome follows a Neuratek-style design system (left sidebar, blue accent, soft
 background, Inter, rounded white cards) defined by CSS variables in `apps/web/src/index.css`.
 
+## MCP connector
+
+`mcp` calls a tool on an MCP server (Streamable HTTP). It performs the JSON-RPC
+handshake (`initialize` → `tools/call`), handles the session id and JSON/SSE
+responses, and unwraps `structuredContent` (or JSON text content) into the
+process context. Configure `url`, `toolName`, and optional `apiKey`. Add one
+from the Service Task inspector or Settings with **+ MCP**. A local `/mock-mcp`
+endpoint lets you exercise it without a real server.
+
 ## Maverick Agents connector
 
 `maverick-agent` is a native REST connector for calling Maverick agents from a

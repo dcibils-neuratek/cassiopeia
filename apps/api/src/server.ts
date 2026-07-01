@@ -180,6 +180,23 @@ app.post("/connectors/:id/test", async (req, reply) => {
   }
 });
 
+// A local stand-in for an MCP server (Streamable HTTP, JSON-RPC) so the mcp
+// connector can be exercised without a real MCP server.
+app.post("/mock-mcp", async (req, reply) => {
+  const msg = (req.body ?? {}) as { id?: number; method?: string; params?: any };
+  if (msg.method === "initialize") {
+    reply.header("mcp-session-id", "mock-session-1");
+    return { jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "mock-mcp", version: "0.1" } } };
+  }
+  if (msg.method === "notifications/initialized") return reply.code(202).send();
+  if (msg.method === "tools/call") {
+    const args = msg.params?.arguments ?? {};
+    const out = { tool: msg.params?.name, ...args, mcpHandled: true };
+    return { jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: JSON.stringify(out) }], structuredContent: out } };
+  }
+  return { jsonrpc: "2.0", id: msg.id, result: {} };
+});
+
 // A local stand-in for a Maverick agent so the maverick-agent connector can be
 // exercised without a real Maverick instance. Echoes the input under `output`.
 app.post("/mock-maverick/agents/:agentId/invoke", async (req) => {

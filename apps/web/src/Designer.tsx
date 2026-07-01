@@ -260,10 +260,11 @@ export function Designer({ defId }: { defId: string }) {
     setMsg(`Connector ${c.id} saved`);
   }
   async function newConnectorFor(node: ModelNode, type: string) {
-    const isMav = type === "maverick-agent";
-    const id = `${isMav ? "mav" : "ai"}_${uid()}`;
-    const config = isMav
-      ? { baseUrl: "https://your-maverick-host", apiKey: "", agentId: "" }
+    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : "ai";
+    const id = `${prefix}_${uid()}`;
+    const config =
+      type === "maverick-agent" ? { baseUrl: "https://your-maverick-host", apiKey: "", agentId: "" }
+      : type === "mcp" ? { url: "https://your-mcp-server/mcp", toolName: "", apiKey: "" }
       : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: "You are a task agent inside a business process.", jsonOutput: true };
     const c: Connector = { id, type, config };
     await api(`/connectors`, { method: "POST", body: JSON.stringify(c) });
@@ -516,10 +517,22 @@ function ServiceInspector({
         <option value="">(none)</option>
         {connectors.map((x) => <option key={x.id} value={x.id}>{x.id} ({x.type})</option>)}
       </select>
-      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
         <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ AI agent</button>
         <button style={S.ghost} onClick={() => onNew("maverick-agent")}>+ Maverick</button>
+        <button style={S.ghost} onClick={() => onNew("mcp")}>+ MCP</button>
       </div>
+
+      {c && c.type === "mcp" && (
+        <>
+          <L>MCP server URL</L>
+          <input style={S.input} value={c.config.url ?? ""} onChange={(e) => setCfg(c.id, "url", e.target.value)} />
+          <L>Tool name</L>
+          <input style={S.input} value={c.config.toolName ?? ""} onChange={(e) => setCfg(c.id, "toolName", e.target.value)} />
+          <L>API key <span style={S.hint}>optional</span></L>
+          <input style={S.input} type="password" value={c.config.apiKey ?? ""} onChange={(e) => setCfg(c.id, "apiKey", e.target.value)} />
+        </>
+      )}
 
       {c && c.type === "maverick-agent" && (
         <>

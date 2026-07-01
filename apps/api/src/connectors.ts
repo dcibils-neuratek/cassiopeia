@@ -12,6 +12,27 @@ function stripFences(s: string): string {
   return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 }
 
+/** POST one JSON-RPC message to an MCP Streamable-HTTP endpoint; parse JSON or SSE. */
+async function mcpPost(url: string, message: unknown, headers: Record<string, string>) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+    body: JSON.stringify(message),
+  });
+  const sid = res.headers.get("mcp-session-id") ?? undefined;
+  const ct = res.headers.get("content-type") ?? "";
+  const text = await res.text();
+  if (!res.ok) throw new Error(`MCP HTTP ${res.status}: ${text.slice(0, 200)}`);
+  let json: any = {};
+  if (ct.includes("text/event-stream")) {
+    const dataLines = text.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).filter(Boolean);
+    if (dataLines.length) json = JSON.parse(dataLines[dataLines.length - 1]);
+  } else if (text.trim()) {
+    json = JSON.parse(text);
+  }
+  return { json, sid };
+}
+
 const adapters: Record<string, Adapter> = {
   // Deterministic stand-in for a document-verification agent. Higher income =>
   // lower risk. Real AI Agent connector arrives in a later milestone.
@@ -142,6 +163,39 @@ const adapters: Record<string, Adapter> = {
     const out = (data.output ?? data.result ?? data) as unknown;
     if (out && typeof out === "object" && !Array.isArray(out)) return out as Context;
     return { maverickOutput: out as any };
+  },
+
+  // MCP connector — call a tool on an MCP server (Streamable HTTP). Does the
+  // JSON-RPC handshake (initialize → tools/call). config:
+  //   { url, toolName, apiKey? }
+  // Unwraps structuredContent (or JSON text content) into the process context.
+  mcp: async (input, config) => {
+    const url = String(config.url ?? "");
+    const toolName = String(config.toolName ?? "");
+    if (!url || !toolName) throw new Error("mcp connector needs url and toolName");
+    const auth = config.apiKey ? { authorization: `Bearer ${String(config.apiKey)}` } : {};
+
+    const init = await mcpPost(
+      url,
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "cassiopeia", version: "0.1" } } },
+      auth,
+    );
+    const sess = init.sid ? { "mcp-session-id": init.sid, ...auth } : auth;
+
+    // best-effort "initialized" notification (some servers require it)
+    try {
+      await fetch(url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...sess }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+    } catch { /* ignore */ }
+
+    const call = await mcpPost(url, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: toolName, arguments: input } }, sess);
+    if (call.json?.error) throw new Error(`MCP tool error: ${call.json.error.message ?? "unknown"}`);
+    const result = call.json?.result ?? {};
+    if (result.structuredContent && typeof result.structuredContent === "object" && !Array.isArray(result.structuredContent)) {
+      return result.structuredContent as Context;
+    }
+    const textOut = (Array.isArray(result.content) ? result.content : [])
+      .filter((c: any) => c?.type === "text").map((c: any) => c.text).join("\n");
+    try { return JSON.parse(stripFences(textOut)) as Context; } catch { return { mcpText: textOut }; }
   },
 
   // Generic REST connector. config: { url, method?, headers? }.

@@ -25,8 +25,10 @@ export function Settings() {
     reload();
   }
   function newConnector(type: string) {
-    const id = `${type === "maverick-agent" ? "mav" : type === "http" ? "http" : "ai"}_${Math.random().toString(36).slice(2, 6)}`;
+    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : type === "http" ? "http" : "ai";
+    const id = `${prefix}_${Math.random().toString(36).slice(2, 6)}`;
     const config = type === "maverick-agent" ? { baseUrl: "https://your-maverick-host", apiKey: "", agentId: "" }
+      : type === "mcp" ? { url: "https://your-mcp-server/mcp", toolName: "", apiKey: "" }
       : type === "http" ? { url: "", method: "POST" }
       : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: "You are a task agent inside a business process.", jsonOutput: true };
     const c = { id, type, config };
@@ -62,6 +64,7 @@ export function Settings() {
           <div style={{ display: "flex", gap: 6 }}>
             <button style={S.ghost} onClick={() => newConnector("ai-agent")}>+ AI agent</button>
             <button style={S.ghost} onClick={() => newConnector("maverick-agent")}>+ Maverick</button>
+            <button style={S.ghost} onClick={() => newConnector("mcp")}>+ MCP</button>
             <button style={S.ghost} onClick={() => newConnector("http")}>+ HTTP</button>
           </div>
         </div>
@@ -91,6 +94,11 @@ export function Settings() {
                   <L>Maverick base URL</L><input style={S.input} value={sel.config.baseUrl ?? ""} onChange={(e) => setCfg(sel.id, "baseUrl", e.target.value)} />
                   <L>API key</L><input style={S.input} type="password" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
                   <L>Agent ID</L><input style={S.input} value={sel.config.agentId ?? ""} onChange={(e) => setCfg(sel.id, "agentId", e.target.value)} />
+                </>}
+                {sel.type === "mcp" && <>
+                  <L>MCP server URL</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
+                  <L>Tool name</L><input style={S.input} value={sel.config.toolName ?? ""} onChange={(e) => setCfg(sel.id, "toolName", e.target.value)} />
+                  <L>API key (optional)</L><input style={S.input} type="password" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
                 </>}
                 {sel.type === "http" && <>
                   <L>URL</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
