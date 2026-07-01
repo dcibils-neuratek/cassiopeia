@@ -27,6 +27,9 @@ export interface TaskRow {
   formId: string | null;
   status: "open" | "completed";
   dueAt?: string | null;
+  assignee?: string | null;
+  role?: string | null;
+  priority?: string | null;
 }
 
 export interface TimerRow {
@@ -114,6 +117,9 @@ function addColumnIfMissing(table: string, column: string, decl: string): void {
 function migrate(): void {
   addColumnIfMissing("instances", "error", "error TEXT");
   addColumnIfMissing("tasks", "due_at", "due_at TEXT");
+  addColumnIfMissing("tasks", "assignee", "assignee TEXT");
+  addColumnIfMissing("tasks", "role", "role TEXT");
+  addColumnIfMissing("tasks", "priority", "priority TEXT");
 }
 
 // ---- definitions ----
@@ -310,14 +316,24 @@ function rowToTask(row: Record<string, unknown>): TaskRow {
     formId: (row.form_id as string) ?? null,
     status: row.status as TaskRow["status"],
     dueAt: (row.due_at as string) ?? null,
+    assignee: (row.assignee as string) ?? null,
+    role: (row.role as string) ?? null,
+    priority: (row.priority as string) ?? null,
   };
+}
+
+export interface CreateTaskOpts {
+  dueAt?: string | null;
+  assignee?: string | null;
+  role?: string | null;
+  priority?: string | null;
 }
 
 export function createTask(
   instanceId: string,
   nodeId: string,
   formId: string | null,
-  dueAt: string | null = null,
+  opts: CreateTaskOpts = {},
 ): TaskRow {
   const task: TaskRow = {
     id: randomUUID(),
@@ -325,13 +341,21 @@ export function createTask(
     nodeId,
     formId,
     status: "open",
-    dueAt,
+    dueAt: opts.dueAt ?? null,
+    assignee: opts.assignee ?? null,
+    role: opts.role ?? null,
+    priority: opts.priority ?? null,
   };
   db.prepare(
-    `INSERT INTO tasks (id, instance_id, node_id, form_id, status, due_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(task.id, instanceId, nodeId, formId, task.status, dueAt);
+    `INSERT INTO tasks (id, instance_id, node_id, form_id, status, due_at, assignee, role, priority)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(task.id, instanceId, nodeId, formId, task.status, task.dueAt ?? null, task.assignee ?? null, task.role ?? null, task.priority ?? null);
   return task;
+}
+
+/** Assign (claim) an open task to a user. */
+export function claimTask(id: string, assignee: string): void {
+  db.prepare(`UPDATE tasks SET assignee = ? WHERE id = ?`).run(assignee, id);
 }
 
 export function getTask(id: string): TaskRow {

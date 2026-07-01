@@ -32,7 +32,7 @@ Give the engine a sense of time.
 - New **`timer` node** (wait N seconds, or until a context date) resumed by a **background scheduler**.
 - **Due dates / SLA** on user tasks; overdue instances surfaced on Home / Monitor.
 
-### M8 — Task inbox & assignment
+### M8 — Task inbox & assignment ✅
 Turn human tasks into a real worklist.
 - User tasks carry `assignee` / `candidateRole` / `priority`.
 - A dedicated **Inbox** screen: filter, claim, open the form inline, complete — across all running instances.

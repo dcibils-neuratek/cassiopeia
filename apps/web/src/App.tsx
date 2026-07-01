@@ -6,9 +6,10 @@ import { Templates } from "./Templates.js";
 import { Home } from "./Home.js";
 import { Stats } from "./Stats.js";
 import { Settings } from "./Settings.js";
+import { Inbox } from "./Inbox.js";
 import { api } from "./api.js";
 
-type Mode = "home" | "stats" | "templates" | "build" | "run" | "monitor" | "settings";
+type Mode = "home" | "stats" | "templates" | "build" | "run" | "inbox" | "monitor" | "settings";
 type DefSummary = { id: string; name: string };
 
 const HINTS: Record<Mode, string> = {
@@ -17,17 +18,18 @@ const HINTS: Record<Mode, string> = {
   templates: "Start from a ready-made banking workflow",
   build: "Design the process and its forms",
   run: "Try it as an end user",
+  inbox: "Your worklist of open human tasks",
   monitor: "Watch running instances",
   settings: "API keys and connectors",
 };
 const TITLES: Record<Mode, string> = {
   home: "Home", stats: "Stats", templates: "Templates", build: "Build",
-  run: "Run", monitor: "Monitor", settings: "Settings",
+  run: "Run", inbox: "Inbox", monitor: "Monitor", settings: "Settings",
 };
 
 const GROUPS: { label: string; items: Mode[] }[] = [
   { label: "Overview", items: ["home", "stats"] },
-  { label: "Workflow", items: ["templates", "build", "run", "monitor"] },
+  { label: "Workflow", items: ["templates", "build", "run", "inbox", "monitor"] },
 ];
 
 export function App() {
@@ -101,6 +103,7 @@ export function App() {
           {mode === "templates" && <Templates onUse={useTemplate} />}
           {mode === "build" && <Designer key={defId} defId={defId} />}
           {mode === "run" && <Portal key={defId} defId={defId} />}
+          {mode === "inbox" && <Inbox />}
           {mode === "monitor" && <Monitor />}
           {mode === "settings" && <Settings />}
         </div>
@@ -116,6 +119,7 @@ function Icon({ name }: { name: Mode | "settings" }) {
     templates: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
     build: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
     run: <polygon points="6 4 20 12 6 20 6 4" />,
+    inbox: <><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.5 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.5A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.5Z" /></>,
     monitor: <><path d="M3 3v18h18" /><path d="M7 14l3-4 3 3 4-6" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></>,
   };

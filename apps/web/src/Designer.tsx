@@ -363,11 +363,38 @@ export function Designer({ defId }: { defId: string }) {
                       <button style={S.primary} onClick={() => createFormForTask(selNode)}>Create &amp; design form →</button>
                     )}
                   </div>
-                  <L>SLA — due within (hours)</L>
-                  <input style={S.input} type="number" min={0} placeholder="no deadline"
-                    value={(selNode as any).slaHours ?? ""}
-                    onChange={(e) => updateNode(selNode.id, { slaHours: e.target.value.trim() === "" ? undefined : Math.max(0, Number(e.target.value) || 0) } as any)} />
-                  <p style={S.hint}>Tasks past this are flagged overdue in Monitor.</p>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <L>Assignee</L>
+                      <input style={S.input} placeholder="unassigned"
+                        value={(selNode as any).assignee ?? ""}
+                        onChange={(e) => updateNode(selNode.id, { assignee: e.target.value || undefined } as any)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <L>Role</L>
+                      <input style={S.input} placeholder="e.g. underwriter"
+                        value={(selNode as any).candidateRole ?? ""}
+                        onChange={(e) => updateNode(selNode.id, { candidateRole: e.target.value || undefined } as any)} />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <L>Priority</L>
+                      <select style={S.input} value={(selNode as any).priority ?? "normal"}
+                        onChange={(e) => updateNode(selNode.id, { priority: e.target.value === "normal" ? undefined : e.target.value } as any)}>
+                        <option value="low">low</option>
+                        <option value="normal">normal</option>
+                        <option value="high">high</option>
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <L>SLA (hours)</L>
+                      <input style={S.input} type="number" min={0} placeholder="none"
+                        value={(selNode as any).slaHours ?? ""}
+                        onChange={(e) => updateNode(selNode.id, { slaHours: e.target.value.trim() === "" ? undefined : Math.max(0, Number(e.target.value) || 0) } as any)} />
+                    </div>
+                  </div>
+                  <p style={S.hint}>Drives the Inbox worklist: ordering, filtering, and overdue flags.</p>
                 </>
               )}
 

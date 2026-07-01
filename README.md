@@ -76,6 +76,7 @@ pnpm dev:web     # web only, on http://localhost:5173 (proxies /api -> :3001)
 - **M5** ✅ connectors (HTTP + provider-neutral OpenAI-compatible AI Agent), connector admin + test, instance monitor → full demo
 - **M6** ✅ resilience: connector retries (backoff) + timeouts, service-task **error routing** (`onError` edge), failed instances captured with a reason, one-click **Retry** in Monitor
 - **M7** ✅ time: **timer nodes** (fixed delay or wait-until a context date) resumed by a background **scheduler**; user-task **SLA** due dates with overdue flags in Monitor
+- **M8** ✅ **Inbox** worklist: user tasks carry assignee / candidate role / priority; a cross-instance inbox to filter, claim, and complete tasks inline (priority + due ordering)
 
 ## Workflow templates
 

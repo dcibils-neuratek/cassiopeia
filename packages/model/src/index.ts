@@ -50,6 +50,12 @@ export interface UserTaskNode {
   outputMap?: Mapping;
   /** Service-level target: hours until the task is considered overdue. */
   slaHours?: number;
+  /** Default assignee (a user) this task lands on in the inbox. */
+  assignee?: string;
+  /** Candidate group/role that may claim the task when unassigned. */
+  candidateRole?: string;
+  /** Work priority; drives inbox ordering. */
+  priority?: "low" | "normal" | "high";
 }
 
 /**

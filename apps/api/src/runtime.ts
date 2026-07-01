@@ -58,7 +58,12 @@ function onParked(def: ProcessDefinition, inst: ProcessInstance, result: Advance
       const dueAt = node.slaHours
         ? new Date(Date.now() + node.slaHours * 3600_000).toISOString()
         : null;
-      createTask(inst.id, node.id, node.formId ?? null, dueAt);
+      createTask(inst.id, node.id, node.formId ?? null, {
+        dueAt,
+        assignee: node.assignee ?? null,
+        role: node.candidateRole ?? null,
+        priority: node.priority ?? null,
+      });
     }
   } else if (result.status === "sleeping") {
     const node = result.timer;

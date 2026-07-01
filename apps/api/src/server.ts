@@ -13,11 +13,13 @@ import {
   getInstance,
   getTask,
   initDb,
+  claimTask,
   listConnectors,
   listDefinitions,
   listEvents,
   listForms,
   listInstances,
+  listOpenTasks,
   maxPublishedVersion,
   openTaskForInstance,
   openTimerForInstance,
@@ -324,6 +326,45 @@ app.post("/instances/:id/retry", async (req, reply) => {
   try {
     const result = await retryInstance(id);
     return { ok: true, result, instance: getInstance(id) };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// The worklist: every open user task across all instances, enriched with the
+// process/node/form names and its instance context so the Inbox can render it.
+app.get("/tasks", async () => {
+  const rank: Record<string, number> = { high: 0, normal: 1, low: 2 };
+  return listOpenTasks()
+    .map((t) => {
+      const inst = getInstance(t.instanceId);
+      let processName = inst.defId;
+      let nodeName = t.nodeId;
+      try {
+        const def = getDefinition(inst.defId, inst.defVersion);
+        processName = def.name;
+        const node = def.nodes.find((n) => n.id === t.nodeId);
+        if (node && "name" in node && node.name) nodeName = node.name;
+      } catch { /* definition gone */ }
+      let formTitle: string | null = null;
+      if (t.formId) { try { formTitle = getForm(t.formId).title; } catch { /* form gone */ } }
+      return { ...t, defId: inst.defId, processName, nodeName, formTitle, context: inst.context };
+    })
+    .sort((a, b) => {
+      const pr = (rank[a.priority ?? "normal"] ?? 1) - (rank[b.priority ?? "normal"] ?? 1);
+      if (pr !== 0) return pr;
+      return (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999"); // sooner due first
+    });
+});
+
+// Claim an open task for a user (assign it to them).
+app.post("/tasks/:taskId/claim", async (req, reply) => {
+  const { taskId } = req.params as { taskId: string };
+  const { assignee } = (req.body ?? {}) as { assignee?: string };
+  if (!assignee) return reply.code(400).send({ ok: false, error: "assignee is required" });
+  try {
+    claimTask(taskId, assignee);
+    return { ok: true };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
   }
