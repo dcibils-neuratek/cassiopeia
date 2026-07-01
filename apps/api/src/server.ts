@@ -28,7 +28,7 @@ import { seedSample } from "./sample.js";
 import { listTemplates, installTemplate } from "./templates.js";
 import { describeProcess } from "./describe.js";
 import { generateWorkflow } from "./ai-build.js";
-import { runConnector } from "./connectors.js";
+import { runConnector, listMcpTools } from "./connectors.js";
 import { startInstance, submitTask } from "./runtime.js";
 
 const app = Fastify({ logger: true });
@@ -121,8 +121,9 @@ app.post("/definitions/:id/ai-build", async (req, reply) => {
     const out = await generateWorkflow(b.instruction, b.current, connectorIds, { baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model });
     const def: ProcessDefinition = { ...out.definition, id };
     for (const f of out.forms) saveForm(f);
+    for (const c of out.connectors) saveConnector({ id: c.id, type: c.type, config: c.config });
     saveDefinition({ ...def, version: 0, status: "draft" });
-    return { ok: true, reply: out.reply, definition: def, errors: out.errors };
+    return { ok: true, reply: out.reply, definition: def, connectors: out.connectors.map((c) => ({ id: c.id, type: c.type })), errors: out.errors };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
   }
@@ -162,6 +163,16 @@ app.post("/definitions/:id/publish", async (req, reply) => {
 app.get("/forms", async () => listForms());
 app.get("/connectors", async () => listConnectors());
 
+// Discover the tools a given MCP server exposes (for the tool-name picker).
+app.post("/mcp/tools", async (req, reply) => {
+  const { url, apiKey } = (req.body ?? {}) as { url?: string; apiKey?: string };
+  try {
+    return { ok: true, tools: await listMcpTools(url ?? "", apiKey) };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
 app.post("/connectors", async (req) => {
   const body = req.body as { id: string; type: string; config: Record<string, unknown> };
   saveConnector({ id: body.id, type: body.type, config: body.config ?? {} });
@@ -189,6 +200,13 @@ app.post("/mock-mcp", async (req, reply) => {
     return { jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "mock-mcp", version: "0.1" } } };
   }
   if (msg.method === "notifications/initialized") return reply.code(202).send();
+  if (msg.method === "tools/list") {
+    return { jsonrpc: "2.0", id: msg.id, result: { tools: [
+      { name: "credit_lookup", description: "Look up a customer's credit profile" },
+      { name: "kyc_check", description: "Run a KYC / AML screening" },
+      { name: "sanctions_screen", description: "Screen a name against sanctions lists" },
+    ] } };
+  }
   if (msg.method === "tools/call") {
     const args = msg.params?.arguments ?? {};
     const out = { tool: msg.params?.name, ...args, mcpHandled: true };
@@ -230,7 +248,7 @@ app.post("/mock-llm/chat/completions", async (req) => {
           { kind: "number", label: "Annual income", required: true },
           { kind: "number", label: "Amount requested", required: true },
         ] } },
-        { id: "check", type: "serviceTask", name: "Verify Applicant", connector: "verify-docs" },
+        { id: "check", type: "serviceTask", name: "Credit Risk Check", connector: "risk_api" },
         { id: "decide", type: "gateway", name: "Approved?" },
         { id: "sign", type: "userTask", name: "Sign Offer" },
         { id: "review", type: "userTask", name: "Manual Review" },
@@ -245,6 +263,7 @@ app.post("/mock-llm/chat/completions", async (req) => {
         { from: "sign", to: "end" },
         { from: "review", to: "end" },
       ],
+      connectors: [{ id: "risk_api", type: "ai-agent", purpose: "assess credit risk and return riskScore" }],
     };
     return { id: "chatcmpl-mock", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(workflow) }, finish_reason: "stop" }] };
   }

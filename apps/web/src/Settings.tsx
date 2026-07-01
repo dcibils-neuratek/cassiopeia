@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
+import { McpToolPicker } from "./McpToolPicker.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
@@ -97,8 +98,8 @@ export function Settings() {
                 </>}
                 {sel.type === "mcp" && <>
                   <L>MCP server URL</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
-                  <L>Tool name</L><input style={S.input} value={sel.config.toolName ?? ""} onChange={(e) => setCfg(sel.id, "toolName", e.target.value)} />
                   <L>API key (optional)</L><input style={S.input} type="password" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
+                  <L>Tool</L><McpToolPicker url={sel.config.url} apiKey={sel.config.apiKey} value={sel.config.toolName} onChange={(v) => setCfg(sel.id, "toolName", v)} />
                 </>}
                 {sel.type === "http" && <>
                   <L>URL</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />

@@ -212,6 +212,28 @@ const adapters: Record<string, Adapter> = {
   },
 };
 
+/** List the tools exposed by an MCP server (initialize → tools/list). */
+export async function listMcpTools(
+  url: string,
+  apiKey?: string,
+): Promise<{ name: string; description: string }[]> {
+  if (!url) throw new Error("MCP server URL is required");
+  const auth = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
+  const init = await mcpPost(
+    url,
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "cassiopeia", version: "0.1" } } },
+    auth,
+  );
+  const sess = init.sid ? { "mcp-session-id": init.sid, ...auth } : auth;
+  try {
+    await fetch(url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...sess }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+  } catch { /* ignore */ }
+  const res = await mcpPost(url, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }, sess);
+  if (res.json?.error) throw new Error(`tools/list: ${res.json.error.message ?? "failed"}`);
+  const tools = Array.isArray(res.json?.result?.tools) ? res.json.result.tools : [];
+  return tools.map((t: any) => ({ name: String(t.name), description: String(t.description ?? "") }));
+}
+
 export async function runConnector(
   connectorId: string,
   input: Context,

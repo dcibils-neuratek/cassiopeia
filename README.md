@@ -119,8 +119,14 @@ background, Inter, rounded white cards) defined by CSS variables in `apps/web/sr
 handshake (`initialize` → `tools/call`), handles the session id and JSON/SSE
 responses, and unwraps `structuredContent` (or JSON text content) into the
 process context. Configure `url`, `toolName`, and optional `apiKey`. Add one
-from the Service Task inspector or Settings with **+ MCP**. A local `/mock-mcp`
-endpoint lets you exercise it without a real server.
+from the Service Task inspector or Settings with **+ MCP**. **Discover** lists the
+server's tools (`POST /mcp/tools`, JSON-RPC `tools/list`) so you can pick the
+tool name from a dropdown. A local `/mock-mcp` endpoint lets you exercise it
+without a real server.
+
+The **AI builder** can also propose and create the connectors a workflow needs
+(AI agent / Maverick / MCP / HTTP) with safe empty configs — it wires them to the
+service tasks and tells you which to add keys for in Settings.
 
 ## Maverick Agents connector
 

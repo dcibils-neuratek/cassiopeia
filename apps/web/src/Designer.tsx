@@ -21,6 +21,7 @@ import type {
 import { api } from "./api.js";
 import { FormDesigner } from "./FormDesigner.js";
 import { Portal } from "./Portal.js";
+import { McpToolPicker } from "./McpToolPicker.js";
 
 const uid = () => Math.random().toString(36).slice(2, 6);
 
@@ -234,9 +235,12 @@ export function Designer({ defId }: { defId: string }) {
     if (r.ok) {
       applyDef(r.data.definition as ProcessDefinition);
       await reloadForms();
+      await reloadConnectors();
+      const created = (r.data.connectors ?? []) as { id: string; type: string }[];
+      const madeNote = created.length ? `\n\nCreated connector${created.length > 1 ? "s" : ""}: ${created.map((c) => `${c.id} (${c.type})`).join(", ")} — add keys in Settings.` : "";
       const errs = (r.data.errors ?? []) as string[];
       const note = errs.length ? `\n\n⚠ Needs a fix before publishing: ${errs.join("; ")}` : "";
-      setChat((c) => [...c, { role: "agent", text: (r.data.reply || "Done.") + note }]);
+      setChat((c) => [...c, { role: "agent", text: (r.data.reply || "Done.") + madeNote + note }]);
     } else {
       setChat((c) => [...c, { role: "agent", text: `Sorry — ${r.data.error ?? "something went wrong."}` }]);
     }
@@ -527,10 +531,10 @@ function ServiceInspector({
         <>
           <L>MCP server URL</L>
           <input style={S.input} value={c.config.url ?? ""} onChange={(e) => setCfg(c.id, "url", e.target.value)} />
-          <L>Tool name</L>
-          <input style={S.input} value={c.config.toolName ?? ""} onChange={(e) => setCfg(c.id, "toolName", e.target.value)} />
           <L>API key <span style={S.hint}>optional</span></L>
           <input style={S.input} type="password" value={c.config.apiKey ?? ""} onChange={(e) => setCfg(c.id, "apiKey", e.target.value)} />
+          <L>Tool</L>
+          <McpToolPicker url={c.config.url} apiKey={c.config.apiKey} value={c.config.toolName} onChange={(v) => setCfg(c.id, "toolName", v)} />
         </>
       )}
 

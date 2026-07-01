@@ -82,9 +82,14 @@ Return ONLY a JSON object (no prose, no code fences) with this exact shape:
     { "from": "check", "to": "decide" },
     { "from": "decide", "to": "approve", "when": "decision == 'approved'" },
     { "from": "decide", "to": "end" }
+  ],
+  "connectors": [
+    { "id": "risk_api", "type": "ai-agent", "purpose": "assess credit risk and return {decision}" }
   ]
 }
 Rules:
+- If a serviceTask needs an integration that does not already exist, add it to the top-level "connectors" array with a short "id", a "type" (one of "ai-agent", "maverick-agent", "mcp", "http"), and a "purpose". Set that serviceTask's "connector" to the id. NEVER invent API keys, URLs, or agent ids — leave configuration to the user.
+- Prefer an EXISTING connector id (listed by the user) when one fits.
 - Exactly one "start" node and at least one "end" node.
 - Every non-end node has exactly one outgoing edge, EXCEPT gateways, which have 2+.
 - For a gateway, put a "when" condition on each conditional edge; leave exactly one edge WITHOUT "when" as the default/else branch. Conditions reference process variables produced by earlier forms/connectors (e.g. income, riskScore, decision) using ==, !=, >, >=, <, <=, &&, ||.
@@ -98,7 +103,7 @@ export async function generateWorkflow(
   current?: ProcessDefinition,
   connectorIds: string[] = [],
   override?: { baseUrl?: string; apiKey?: string; model?: string },
-): Promise<{ reply: string; definition: ProcessDefinition; forms: FormDefinition[]; errors: string[] }> {
+): Promise<{ reply: string; definition: ProcessDefinition; forms: FormDefinition[]; connectors: { id: string; type: string; config: Record<string, any> }[]; errors: string[] }> {
   let cfg: Record<string, any> = { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5", apiKey: "" };
   try { cfg = { ...cfg, ...getConnector("describer").config }; } catch { /* not seeded */ }
   for (const [k, v] of Object.entries(override ?? {})) if (v != null && v !== "") cfg[k] = v;
@@ -134,6 +139,23 @@ export async function generateWorkflow(
   const forms: FormDefinition[] = [];
   const defId = current?.id ?? "onboarding";
 
+  // Connectors the model proposes that don't exist yet — create with safe
+  // defaults (no secrets); the user fills keys/URLs afterward.
+  const known = new Set(connectorIds);
+  const newConnectors: { id: string; type: string; config: Record<string, any> }[] = [];
+  const defaultConfig = (type: string, purpose?: string): Record<string, any> =>
+    type === "maverick-agent" ? { baseUrl: "", apiKey: "", agentId: "" }
+    : type === "mcp" ? { url: "", toolName: "", apiKey: "" }
+    : type === "http" ? { url: "", method: "POST" }
+    : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: purpose || "You are a task agent inside a business process.", jsonOutput: true };
+  for (const pc of Array.isArray((raw as any).connectors) ? (raw as any).connectors : []) {
+    const id = typeof pc?.id === "string" ? pc.id : "";
+    if (!id || known.has(id)) continue;
+    const type = ["ai-agent", "maverick-agent", "mcp", "http"].includes(pc.type) ? pc.type : "ai-agent";
+    newConnectors.push({ id, type, config: defaultConfig(type, pc.purpose) });
+    known.add(id);
+  }
+
   const nodes: ModelNode[] = rawNodes.map((n: any) => {
     if (n.type === "userTask") {
       let formId: string | undefined;
@@ -156,7 +178,7 @@ export async function generateWorkflow(
       return { id: n.id, type: "userTask", name: n.name || n.id, ...(formId ? { formId } : {}) } as ModelNode;
     }
     if (n.type === "serviceTask") {
-      const connectorId = typeof n.connector === "string" && connectorIds.includes(n.connector) ? n.connector : "";
+      const connectorId = typeof n.connector === "string" && known.has(n.connector) ? n.connector : "";
       return { id: n.id, type: "serviceTask", name: n.name || n.id, connectorId } as ModelNode;
     }
     if (n.type === "gateway") return { id: n.id, type: "gateway", name: n.name || n.id, branches: [], defaultEdgeId: "" } as ModelNode;
@@ -188,5 +210,5 @@ export async function generateWorkflow(
     layout: autoLayout(nodes, edges, startNodeId),
   };
 
-  return { reply: raw.reply || "Here's the workflow.", definition, forms, errors: validateDefinition(definition) };
+  return { reply: raw.reply || "Here's the workflow.", definition, forms, connectors: newConnectors, errors: validateDefinition(definition) };
 }
