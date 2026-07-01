@@ -602,7 +602,7 @@ const S: Record<string, React.CSSProperties> = {
   danger: { marginTop: 16, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 13, cursor: "pointer", width: "100%" },
   pre: { background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: 12, overflowX: "auto", marginTop: 8 },
   backdrop: { position: "fixed", inset: 0, background: "rgba(15,23,42,0.35)", zIndex: 40 },
-  drawer: { position: "fixed", top: 0, right: 0, height: "100vh", width: 640, maxWidth: "92vw", background: "white", boxShadow: "-8px 0 24px rgba(0,0,0,0.15)", zIndex: 50, padding: 20, overflowY: "auto" },
+  drawer: { position: "fixed", top: 0, right: 0, height: "100vh", width: "min(1080px, 96vw)", background: "white", boxShadow: "-8px 0 24px rgba(0,0,0,0.15)", zIndex: 50, padding: 24, overflowY: "auto" },
   drawerHead: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #e2e8f0" },
   modal: { position: "fixed", top: "4vh", left: "50%", transform: "translateX(-50%)", width: "min(1000px, 94vw)", height: "90vh", background: "white", borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", zIndex: 50, display: "flex", flexDirection: "column", overflow: "hidden" },
   modalHead: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #e2e8f0" },
