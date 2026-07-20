@@ -2,14 +2,76 @@
 // result inline, then advances. The async/callback branch of the Connector
 // interface is deferred (see design doc). Adapters dispatch on connector `type`.
 
-import type { Context } from "@cassiopeia/model";
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { Context, Json } from "@cassiopeia/model";
 import { getConnector } from "./db.js";
 
 type Adapter = (input: Context, config: Record<string, unknown>) => Promise<Context>;
 
+/**
+ * Per-connector-run context so the ai-agent adapter can report token usage and
+ * tool calls back to the runtime without changing the engine's connector
+ * interface. The runtime sets the store around each connector run.
+ */
+export interface RunHooks {
+  emitUsage?: (usage: Json) => void;
+  connectorId?: string;
+}
+export const runCtx = new AsyncLocalStorage<RunHooks>();
+
 /** Strip ```json … ``` fences some models wrap JSON in, despite instructions. */
 function stripFences(s: string): string {
   return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+}
+
+// Rough public pricing (USD per 1M tokens) for cost estimation. Unknown → 0.
+const PRICING: { match: RegExp; in: number; out: number }[] = [
+  { match: /opus/i, in: 15, out: 75 },
+  { match: /sonnet/i, in: 3, out: 15 },
+  { match: /haiku/i, in: 1, out: 5 },
+  { match: /gpt-4o-mini|4o-mini/i, in: 0.15, out: 0.6 },
+  { match: /gpt-4o|4o/i, in: 2.5, out: 10 },
+  { match: /gpt-4/i, in: 10, out: 30 },
+];
+function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
+  const p = PRICING.find((x) => x.match.test(model));
+  if (!p) return 0;
+  return Number(((promptTokens / 1e6) * p.in + (completionTokens / 1e6) * p.out).toFixed(6));
+}
+
+interface ChatUsage { promptTokens: number; completionTokens: number; totalTokens: number; cost: number; model: string }
+interface ChatResult { message: any; usage: ChatUsage }
+
+/** One OpenAI-compatible chat/completions call; returns the assistant message + usage. */
+async function chatCompletion(
+  config: Record<string, unknown>,
+  messages: unknown[],
+  tools?: unknown[],
+): Promise<ChatResult> {
+  const baseUrl = String(config.baseUrl ?? "").replace(/\/+$/, "");
+  const model = String(config.model ?? "");
+  const body: Record<string, unknown> = { model, messages };
+  if (typeof config.temperature === "number") body.temperature = config.temperature;
+  if (tools && tools.length) body.tools = tools;
+  else if (config.jsonOutput !== false) body.response_format = { type: "json_object" };
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${String(config.apiKey ?? "")}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`ai-agent HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as { choices?: { message?: any }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } };
+  const u = data.usage ?? {};
+  const promptTokens = u.prompt_tokens ?? 0;
+  const completionTokens = u.completion_tokens ?? 0;
+  return {
+    message: data.choices?.[0]?.message ?? { content: "" },
+    usage: { promptTokens, completionTokens, totalTokens: u.total_tokens ?? promptTokens + completionTokens, cost: estimateCost(model, promptTokens, completionTokens), model },
+  };
 }
 
 /** POST one JSON-RPC message to an MCP Streamable-HTTP endpoint; parse JSON or SSE. */
@@ -93,54 +155,97 @@ const adapters: Record<string, Adapter> = {
     };
   },
 
-  // AI Agent connector — OpenAI-compatible /chat/completions. Provider-neutral
-  // by design: point baseUrl+apiKey+model at Anthropic's OpenAI-compat endpoint
-  // (https://api.anthropic.com/v1, model e.g. claude-sonnet-5) or any other
+  // AI Agent connector — OpenAI-compatible /chat/completions. Provider-neutral:
+  // point baseUrl+apiKey+model at Anthropic's OpenAI-compat endpoint or any other
   // OpenAI-compatible server. config:
-  //   { baseUrl, apiKey, model, instructions?, jsonOutput?, temperature? }
+  //   { baseUrl, apiKey, model, instructions?, jsonOutput?, temperature?,
+  //     tools?: [{ name, description?, connector, parameters? }],  // tool-calling
+  //     requiredKeys?: string[],   // output guardrail (retry once if missing)
+  //     maxSteps? }                // tool-loop cap (default 4)
   "ai-agent": async (input, config) => {
     const baseUrl = String(config.baseUrl ?? "").replace(/\/+$/, "");
     const model = String(config.model ?? "");
     if (!baseUrl || !model) throw new Error("ai-agent connector needs baseUrl and model");
     const instructions = String(config.instructions ?? "You are a task agent inside a business process.");
-    const jsonOutput = config.jsonOutput !== false; // default true — process needs structured data
+    const jsonOutput = config.jsonOutput !== false;
+    const toolSpecs = Array.isArray(config.tools) ? (config.tools as any[]) : [];
+    const requiredKeys = Array.isArray(config.requiredKeys) ? (config.requiredKeys as string[]) : [];
+    const maxSteps = typeof config.maxSteps === "number" ? config.maxSteps : 4;
+    const hooks = runCtx.getStore();
 
     const system = jsonOutput
-      ? `${instructions}\n\nRespond ONLY with a single JSON object (no prose, no code fences) that the process can merge into its context.`
+      ? `${instructions}\n\nWhen you have the final answer, respond ONLY with a single JSON object (no prose, no code fences) to merge into the process context.`
       : instructions;
 
-    const body: Record<string, unknown> = {
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(input) },
-      ],
-    };
-    if (typeof config.temperature === "number") body.temperature = config.temperature;
-    if (jsonOutput) body.response_format = { type: "json_object" };
-
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${String(config.apiKey ?? "")}`,
+    // OpenAI-style tool schemas; each maps to another connector.
+    const tools = toolSpecs.map((t) => ({
+      type: "function",
+      function: {
+        name: String(t.name),
+        description: String(t.description ?? `Call the ${t.connector} connector`),
+        parameters: t.parameters ?? { type: "object", properties: {}, additionalProperties: true },
       },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`ai-agent HTTP ${res.status}: ${text.slice(0, 300)}`);
-    }
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
+    }));
+    const toolToConnector = new Map<string, string>(toolSpecs.map((t) => [String(t.name), String(t.connector)]));
+
+    const messages: any[] = [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify(input) },
+    ];
+
+    const totals = { promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 };
+    const accumulate = (u: ChatUsage) => {
+      totals.promptTokens += u.promptTokens; totals.completionTokens += u.completionTokens;
+      totals.totalTokens += u.totalTokens; totals.cost = Number((totals.cost + u.cost).toFixed(6));
     };
-    const content = data.choices?.[0]?.message?.content ?? "";
-    if (!jsonOutput) return { agentText: content };
-    try {
-      return JSON.parse(stripFences(content)) as Context;
-    } catch {
-      return { agentRaw: content, agentParseError: true };
+
+    // Reasoning + tool-calling loop.
+    let finalContent = "";
+    for (let step = 0; step < maxSteps; step++) {
+      const { message, usage } = await chatCompletion(config, messages, tools.length ? tools : undefined);
+      accumulate(usage);
+      messages.push(message);
+      const calls = message.tool_calls as any[] | undefined;
+      if (calls && calls.length) {
+        for (const call of calls) {
+          const name = call.function?.name;
+          const connectorId = toolToConnector.get(name);
+          let result: unknown;
+          try {
+            const args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+            result = connectorId ? await runConnector(connectorId, args) : { error: `unknown tool ${name}` };
+          } catch (err) {
+            result = { error: (err as Error).message };
+          }
+          messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+        }
+        continue; // let the model read tool results
+      }
+      finalContent = message.content ?? "";
+      break;
     }
+
+    if (hooks?.emitUsage) {
+      hooks.emitUsage({ model, promptTokens: totals.promptTokens, completionTokens: totals.completionTokens, totalTokens: totals.totalTokens, cost: totals.cost, tools: tools.length } as Json);
+    }
+
+    if (!jsonOutput) return { agentText: finalContent };
+    let out: Context;
+    try { out = JSON.parse(stripFences(finalContent)) as Context; }
+    catch { out = { agentRaw: finalContent, agentParseError: true }; }
+
+    // Output guardrail: one corrective retry if required keys are missing.
+    const missing = requiredKeys.filter((k) => !(k in out));
+    if (missing.length && !out.agentParseError) {
+      messages.push({ role: "user", content: `Your JSON is missing required keys: ${missing.join(", ")}. Reply again with a complete JSON object including them.` });
+      const { message, usage } = await chatCompletion(config, messages);
+      accumulate(usage);
+      if (hooks?.emitUsage) hooks.emitUsage({ model, retry: true, totalTokens: usage.totalTokens, cost: usage.cost } as Json);
+      try { out = JSON.parse(stripFences(message.content ?? "")) as Context; } catch { /* keep prior */ }
+    }
+    const stillMissing = requiredKeys.filter((k) => !(k in out));
+    if (stillMissing.length) out.guardrailMissing = stillMissing as unknown as Json;
+    return out;
   },
 
   // Native Maverick Agents connector — a REST call to a Maverick agent. Call

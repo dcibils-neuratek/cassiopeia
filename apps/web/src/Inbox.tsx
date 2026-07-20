@@ -121,7 +121,7 @@ export function Inbox({ me }: { me: string }) {
               <button style={S.claim} disabled={busy} onClick={() => claim(sel)}>Claim for {me}</button>
             )}
             <div style={{ marginTop: 12 }}>
-              {sel.formId && form && <FormRenderer key={sel.id} form={form} submitLabel={busy ? "Working…" : "Complete task"} onSubmit={complete} />}
+              {sel.formId && form && <FormRenderer key={sel.id} form={form} initial={sel.context as any} submitLabel={busy ? "Working…" : "Complete task"} onSubmit={complete} />}
               {sel.formId && !form && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Loading form…</p>}
               {!sel.formId && (
                 <>

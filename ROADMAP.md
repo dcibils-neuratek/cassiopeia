@@ -73,7 +73,7 @@ Give the platform real users and stop trusting the client.
 - **Web**: login screen + auth context, token on every `api()` call, current-user
   chip + logout, role-gated UI. Seed an initial admin.
 
-### M12 — Agentic depth: tool-calling agents + human-in-the-loop AI review
+### M12 — Agentic depth: tool-calling agents + human-in-the-loop AI review ✅
 The differentiator. Agents that use tools mid-reasoning; humans supervise.
 - `ai-agent` upgraded to a **tool-calling loop** (call connectors/MCP tools while
   reasoning); **structured-output schema** validation + guardrails.

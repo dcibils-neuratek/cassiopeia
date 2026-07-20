@@ -12,6 +12,7 @@ const ORDER = ["running", "waiting", "completed", "failed"];
 type NodeStat = { nodeId: string; name: string; type: string; visits: number; avgMs: number; maxMs: number };
 type Analytics = {
   name: string; totalInstances: number; completedCount: number; avgCycleMs: number | null;
+  aiTokens: number; aiCost: number;
   nodeStats: NodeStat[]; bottleneck: NodeStat | null;
   gatewayDistribution: { nodeId: string; name: string; branches: { to: string; toName: string; count: number }[] }[];
   failuresByNode: { nodeId: string; name: string; count: number }[];
@@ -138,6 +139,8 @@ export function Stats() {
             <Metric label="Avg completion time" value={fmtMs(analytics.avgCycleMs)} />
             <Metric label="Completed" value={String(analytics.completedCount)} />
             <Metric label="Bottleneck" value={analytics.bottleneck ? `${analytics.bottleneck.name} · ${fmtMs(analytics.bottleneck.avgMs)}` : "—"} />
+            <Metric label="AI tokens" value={(analytics.aiTokens ?? 0).toLocaleString()} />
+            <Metric label="Est. AI cost" value={`$${(analytics.aiCost ?? 0).toFixed(4)}`} />
           </div>
           <table style={S.table}>
             <thead><tr style={{ color: "var(--text-muted)", textAlign: "left" }}>

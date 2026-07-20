@@ -29,12 +29,19 @@ import {
   saveInstance,
 } from "./db.js";
 import { getNode } from "@cassiopeia/model";
-import { runConnector } from "./connectors.js";
+import { runConnector, runCtx } from "./connectors.js";
 
 function depsFor(instanceId: string): EngineDeps {
+  const emit = (event: Parameters<EngineDeps["emit"]>[0]) => addEvent(instanceId, event, new Date().toISOString());
   return {
-    runConnector,
-    emit: (event) => addEvent(instanceId, event, new Date().toISOString()),
+    // Run each connector inside a hook context so the ai-agent can report token
+    // usage / cost back as an audit event without changing the engine interface.
+    runConnector: (connectorId, input) =>
+      runCtx.run(
+        { connectorId, emitUsage: (usage) => emit({ type: "agent.usage", nodeId: connectorId, payload: usage }) },
+        () => runConnector(connectorId, input),
+      ),
+    emit,
   };
 }
 

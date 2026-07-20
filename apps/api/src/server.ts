@@ -409,8 +409,21 @@ app.post("/mock-maverick/agents/:agentId/invoke", async (req) => {
 // A local OpenAI-compatible endpoint so the AI Agent connector can be exercised
 // end-to-end without real credentials. Echoes a deterministic JSON "decision".
 app.post("/mock-llm/chat/completions", async (req) => {
-  const body = req.body as { messages?: { role: string; content: string }[] };
-  const system = body.messages?.find((m) => m.role === "system")?.content ?? "";
+  const body = req.body as { messages?: { role: string; content: string }[]; tools?: { function?: { name?: string } }[] };
+  const messages = body.messages ?? [];
+  const system = messages.find((m) => m.role === "system")?.content ?? "";
+  const usage = { prompt_tokens: 180, completion_tokens: 45, total_tokens: 225 };
+
+  // Tool-calling: if tools are offered and no tool result has come back yet,
+  // ask to call the first tool once; on the next turn, produce the final answer.
+  const hasToolResult = messages.some((m) => m.role === "tool");
+  if (Array.isArray(body.tools) && body.tools.length && !hasToolResult) {
+    const name = body.tools[0]?.function?.name ?? "lookup";
+    return {
+      id: "chatcmpl-mock", object: "chat.completion", usage,
+      choices: [{ index: 0, message: { role: "assistant", content: null, tool_calls: [{ id: "call_1", type: "function", function: { name, arguments: JSON.stringify({ query: "mock" }) } }] }, finish_reason: "tool_calls" }],
+    };
+  }
 
   // Workflow-builder prompt → return a sample workflow JSON.
   if (system.includes("Cassiopeia workflow builder")) {
@@ -441,10 +454,10 @@ app.post("/mock-llm/chat/completions", async (req) => {
       ],
       connectors: [{ id: "risk_api", type: "ai-agent", purpose: "assess credit risk and return riskScore" }],
     };
-    return { id: "chatcmpl-mock", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(workflow) }, finish_reason: "stop" }] };
+    return { id: "chatcmpl-mock", object: "chat.completion", usage, choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(workflow) }, finish_reason: "stop" }] };
   }
 
-  const userMsg = [...(body.messages ?? [])].reverse().find((m) => m.role === "user");
+  const userMsg = [...messages].reverse().find((m) => m.role === "user");
   let income = 0;
   try {
     const parsed = JSON.parse(userMsg?.content ?? "{}");
@@ -452,10 +465,12 @@ app.post("/mock-llm/chat/completions", async (req) => {
   } catch {
     /* ignore */
   }
-  const decision = { riskScore: income >= 5000 ? 0.2 : 0.9, verified: true, reviewedBy: "mock-llm" };
+  const toolInformed = hasToolResult;
+  const decision = { riskScore: income >= 5000 ? 0.2 : 0.9, verified: true, reviewedBy: "mock-llm", confidence: 0.82, ...(toolInformed ? { toolUsed: true } : {}) };
   return {
     id: "chatcmpl-mock",
     object: "chat.completion",
+    usage,
     choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(decision) }, finish_reason: "stop" }],
   };
 });

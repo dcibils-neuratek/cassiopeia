@@ -27,6 +27,7 @@ export interface EngineEvent {
     | "service.completed"
     | "service.failed"
     | "service.retried"
+    | "agent.usage"
     | "gateway.evaluated"
     | "timer.scheduled"
     | "timer.fired"

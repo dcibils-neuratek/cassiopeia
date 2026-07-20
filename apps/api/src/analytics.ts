@@ -23,6 +23,8 @@ export interface ProcessAnalytics {
   byStatus: Record<string, number>;
   completedCount: number;
   avgCycleMs: number | null;
+  aiTokens: number;
+  aiCost: number;
   nodeStats: NodeStat[];
   bottleneck: NodeStat | null;
   gatewayDistribution: { nodeId: string; name: string; branches: { to: string; toName: string; count: number }[] }[];
@@ -41,6 +43,8 @@ export function computeAnalytics(defId: string): ProcessAnalytics {
   const failCounts = new Map<string, number>();
   let completedCount = 0;
   let cycleTotal = 0;
+  let aiTokens = 0;
+  let aiCost = 0;
 
   for (const inst of instances) {
     byStatus[inst.status] = (byStatus[inst.status] ?? 0) + 1;
@@ -74,6 +78,11 @@ export function computeAnalytics(defId: string): ProcessAnalytics {
         }
       }
       if (e.type === "service.failed" && e.nodeId) failCounts.set(e.nodeId, (failCounts.get(e.nodeId) ?? 0) + 1);
+      if (e.type === "agent.usage") {
+        const p = (e.payload ?? {}) as { totalTokens?: number; cost?: number };
+        aiTokens += p.totalTokens ?? 0;
+        aiCost += p.cost ?? 0;
+      }
       if (e.type === "instance.completed" || e.type === "instance.failed") {
         closeNode(ts); prevNode = null;
         if (e.type === "instance.completed" && startedTs != null) { completedCount++; cycleTotal += ts - startedTs; }
@@ -111,6 +120,8 @@ export function computeAnalytics(defId: string): ProcessAnalytics {
     byStatus,
     completedCount,
     avgCycleMs: completedCount ? Math.round(cycleTotal / completedCount) : null,
+    aiTokens,
+    aiCost: Number(aiCost.toFixed(6)),
     nodeStats,
     bottleneck,
     gatewayDistribution,
@@ -145,6 +156,7 @@ export async function analyzeProcess(
     `Process: ${a.name}`,
     `Instances: ${a.totalInstances} (by status: ${JSON.stringify(a.byStatus)})`,
     `Completed: ${a.completedCount}; average completion time: ${fmtMs(a.avgCycleMs)}`,
+    `AI usage: ${a.aiTokens} tokens, ~$${a.aiCost} estimated`,
     `Bottleneck: ${a.bottleneck ? `${a.bottleneck.name} (avg ${fmtMs(a.bottleneck.avgMs)}, ${a.bottleneck.visits} visits)` : "none"}`,
     "Per-node cycle time (avg / max / visits):",
     ...a.nodeStats.map((n) => `- ${n.name} [${n.type}]: avg ${fmtMs(n.avgMs)}, max ${fmtMs(n.maxMs)}, ${n.visits} visits`),

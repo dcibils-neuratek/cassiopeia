@@ -130,9 +130,23 @@ export function Settings() {
               <>
                 {sel.type === "ai-agent" && <>
                   <L>Base URL</L><input style={S.input} value={sel.config.baseUrl ?? ""} onChange={(e) => setCfg(sel.id, "baseUrl", e.target.value)} />
-                  <L>API key</L><input style={S.input} type="password" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
+                  <L>API key</L><input style={S.input} type="password" placeholder="unchanged if left blank" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
                   <L>Model</L><input style={S.input} value={sel.config.model ?? ""} onChange={(e) => setCfg(sel.id, "model", e.target.value)} />
                   <L>Instructions</L><textarea style={{ ...S.input, height: 64 }} value={sel.config.instructions ?? ""} onChange={(e) => setCfg(sel.id, "instructions", e.target.value)} />
+                  <L>Tools <span style={S.hint}>the agent can call these connectors while reasoning</span></L>
+                  {((sel.config.tools as any[]) ?? []).map((t: any, i: number) => (
+                    <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                      <input style={{ ...S.input, flex: 1 }} placeholder="tool name" value={t.name ?? ""} onChange={(e) => setCfg(sel.id, "tools", ((sel.config.tools as any[]) ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
+                      <select style={{ ...S.input, flex: 1 }} value={t.connector ?? ""} onChange={(e) => setCfg(sel.id, "tools", ((sel.config.tools as any[]) ?? []).map((x, j) => j === i ? { ...x, connector: e.target.value } : x))}>
+                        <option value="">connector…</option>
+                        {connectors.filter((c) => c.id !== sel.id).map((c) => <option key={c.id} value={c.id}>{c.id}</option>)}
+                      </select>
+                      <button style={S.ghost} onClick={() => setCfg(sel.id, "tools", ((sel.config.tools as any[]) ?? []).filter((_, j) => j !== i))}>✕</button>
+                    </div>
+                  ))}
+                  <button style={S.ghost} onClick={() => setCfg(sel.id, "tools", [...((sel.config.tools as any[]) ?? []), { name: "", connector: "" }])}>+ Tool</button>
+                  <L>Required output keys <span style={S.hint}>guardrail — retries once if missing</span></L>
+                  <input style={S.input} placeholder="e.g. riskScore, decision" value={((sel.config.requiredKeys as string[]) ?? []).join(", ")} onChange={(e) => setCfg(sel.id, "requiredKeys", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
                 </>}
                 {sel.type === "maverick-agent" && <>
                   <L>Maverick base URL</L><input style={S.input} value={sel.config.baseUrl ?? ""} onChange={(e) => setCfg(sel.id, "baseUrl", e.target.value)} />
@@ -202,7 +216,7 @@ const S: Record<string, React.CSSProperties> = {
   input: { width: "100%", boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 13 },
   list: { width: 200, display: "flex", flexDirection: "column", gap: 6 },
   item: { textAlign: "left", border: "1px solid var(--border)", background: "white", borderRadius: 8, padding: "8px 10px", cursor: "pointer" },
-  itemActive: { borderColor: "var(--primary)", background: "var(--primary-tint)" },
+  itemActive: { border: "1px solid var(--primary)", background: "var(--primary-tint)" },
   primary: { background: "var(--primary)", color: "white", border: 0, borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" },
   ghost: { background: "white", color: "var(--primary)", border: "1px solid var(--primary)", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" },
   pre: { background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: 12, overflowX: "auto", marginTop: 8 },

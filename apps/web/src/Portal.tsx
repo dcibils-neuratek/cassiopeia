@@ -66,7 +66,7 @@ export function Portal({ defId, autoStart }: { defId: string; autoStart?: boolea
               </p>
             )}
             {state.openTask && form && (
-              <FormRenderer key={state.openTask.id} form={form} submitLabel="Submit" onSubmit={submit} />
+              <FormRenderer key={state.openTask.id} form={form} initial={state.instance.context as any} submitLabel="Submit" onSubmit={submit} />
             )}
             {state.openTask && !form && <p style={{ color: "#64748b" }}>Loading form…</p>}
           </section>
