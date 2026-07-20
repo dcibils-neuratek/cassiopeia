@@ -281,7 +281,7 @@ const loanDef: ProcessDefinition = {
   nodes: [
     { id: "s", type: "start" },
     { id: "apply", type: "userTask", name: "Loan Application", formId: "loan-application" },
-    { id: "credit", type: "serviceTask", name: "Credit Check", connectorId: "mock-credit-score", inputMap: { annualIncome: "annualIncome", amount: "amount" }, retries: 1, retryDelayMs: 200 },
+    { id: "credit", type: "serviceTask", name: "Credit Check (AI agent)", connectorId: "credit-agent", inputMap: { annualIncome: "annualIncome", amount: "amount" }, retries: 1, retryDelayMs: 200 },
     { id: "gwCredit", type: "gateway", name: "Creditworthy?", branches: [{ edgeId: "e_gw_offer", when: "creditScore >= 650" }], defaultEdgeId: "e_gw_review" },
     { id: "offer", type: "serviceTask", name: "Compute Offer", connectorId: "mock-mortgage", inputMap: { propertyValue: "amount", termYears: "termYears", annualIncome: "annualIncome" } },
     { id: "sign", type: "userTask", name: "Review & Sign Offer", formId: "loan-sign-offer" },
@@ -315,9 +315,10 @@ const loan: Template = {
   id: "loan-preapproval",
   name: "Loan Pre-Approval",
   description:
-    "A personal-loan pre-approval: collect the application, run an automated credit check, auto-approve strong applicants, and route the rest to a human underwriter — then compute an offer and capture the customer's signature.",
+    "A personal-loan pre-approval where the credit check is a real AI agent (Claude) that uses tool-calling: it queries a credit-bureau tool, reasons over the result, and returns a structured decision. Strong applicants are auto-approved; the rest go to a human underwriter — then an offer is computed and signed.",
   teaches: [
-    "A multi-field application form feeding an automated credit-score check",
+    "A real AI agent (Claude) that uses tool-calling — it calls a credit_bureau tool while reasoning",
+    "Output guardrails (requiredKeys) + a confidence score on the agent's decision",
     "A gateway that auto-approves on the score and routes the rest to a human",
     "A prioritized, SLA-backed underwriter task (candidate role: underwriter)",
     "A join: the underwriter's approval rejoins the automated offer path",
@@ -325,7 +326,7 @@ const loan: Template = {
   ],
   steps: [
     "Loan Application collects income, amount, term and employment.",
-    "Credit Check calls mock-credit-score → {creditScore, decision}.",
+    "Credit Check is a Claude agent: it calls the credit_bureau tool, reads the profile, and returns {creditScore, decision, reasoning, confidence}.",
     "Creditworthy? sends score ≥ 650 straight to the offer; the rest to Underwriter Review.",
     "Underwriter Review (high priority, 24h SLA) approves → offer, or rejects → Declined.",
     "Compute Offer calls mock-mortgage for the monthly payment; Review & Sign captures acceptance.",
@@ -334,6 +335,28 @@ const loan: Template = {
   definition: loanDef,
   forms: [loanApplicationForm, loanSignForm, loanUnderwriterForm],
   connectors: [
+    // Real AI-agent credit analyst — calls the credit_bureau tool while reasoning.
+    // Installed key-less; add the API key in Settings / the connector library.
+    {
+      id: "credit-agent",
+      type: "ai-agent",
+      config: {
+        baseUrl: "https://api.anthropic.com/v1",
+        model: "claude-haiku-4-5-20251001",
+        apiKey: "",
+        jsonOutput: true,
+        instructions:
+          "You are a credit risk analyst for a personal loan. First call the credit_bureau tool with the applicant's annualIncome and amount to retrieve their credit profile. Then decide. Respond ONLY with a JSON object: {\"creditScore\": <the number from the bureau>, \"decision\": \"approved\" or \"review\", \"reasoning\": \"<one short sentence>\", \"confidence\": <0..1>}.",
+        requiredKeys: ["creditScore", "decision"],
+        tools: [{
+          name: "credit_bureau",
+          description: "Retrieve the applicant's credit score and repayment decision from the credit bureau",
+          connector: "mock-credit-score",
+          parameters: { type: "object", properties: { annualIncome: { type: "number" }, amount: { type: "number" } }, required: ["annualIncome", "amount"] },
+        }],
+      },
+    },
+    // The tool the agent calls (stands in for a real credit-bureau API).
     { id: "mock-credit-score", type: "mock-credit-score", config: {} },
     { id: "mock-mortgage", type: "mock-mortgage", config: {} },
   ],
