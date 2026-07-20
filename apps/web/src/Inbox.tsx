@@ -20,6 +20,7 @@ export function Inbox({ me }: { me: string }) {
   const [sel, setSel] = useState<Task | null>(null);
   const [form, setForm] = useState<FormDefinition | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reassignTo, setReassignTo] = useState("");
 
   async function reload() {
     const r = await api("/tasks");
@@ -44,6 +45,16 @@ export function Inbox({ me }: { me: string }) {
     setBusy(true);
     try { await api(`/tasks/${t.id}/claim`, { method: "POST" }); await reload(); }
     finally { setBusy(false); }
+  }
+  async function reassign(t: Task) {
+    const to = reassignTo.trim();
+    if (!to) return;
+    setBusy(true);
+    try {
+      const r = await api(`/tasks/${t.id}/reassign`, { method: "POST", body: JSON.stringify({ assignee: to }) });
+      if (!r.ok) alert(r.data?.error ?? "Reassign failed");
+      setReassignTo(""); await reload();
+    } finally { setBusy(false); }
   }
   async function complete(patch: FormValues) {
     if (!sel) return;
@@ -117,9 +128,13 @@ export function Inbox({ me }: { me: string }) {
               <span style={S.tag}>assignee: {sel.assignee || "unassigned"}</span>
               {sel.dueAt && <span style={{ ...S.tag, color: overdue(sel) ? "#dc2626" : undefined }}>{overdue(sel) ? "overdue" : "due"} {new Date(sel.dueAt).toLocaleString()}</span>}
             </div>
-            {sel.assignee !== me && (
-              <button style={S.claim} disabled={busy} onClick={() => claim(sel)}>Claim for {me}</button>
-            )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              {sel.assignee !== me && (
+                <button style={S.claim} disabled={busy} onClick={() => claim(sel)}>Claim for {me}</button>
+              )}
+              <input style={S.reassignInput} placeholder="reassign to…" value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} />
+              <button style={S.reassignBtn} disabled={busy || !reassignTo.trim()} onClick={() => reassign(sel)}>Reassign</button>
+            </div>
             <div style={{ marginTop: 12 }}>
               {sel.formId && form && <FormRenderer key={sel.id} form={form} initial={sel.context as any} submitLabel={busy ? "Working…" : "Complete task"} onSubmit={complete} />}
               {sel.formId && !form && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Loading form…</p>}
@@ -149,6 +164,8 @@ const S: Record<string, React.CSSProperties> = {
   td: { padding: "8px 12px", color: "var(--text)" },
   tag: { fontSize: 11, background: "#f1f5f9", borderRadius: 6, padding: "3px 7px", color: "var(--text-muted)" },
   claim: { background: "var(--primary)", color: "white", border: 0, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
+  reassignInput: { border: "1px solid var(--border-strong)", borderRadius: 8, padding: "6px 9px", fontSize: 12, width: 120 },
+  reassignBtn: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   primary: { background: "#2563eb", color: "white", border: 0, borderRadius: 8, padding: "9px 14px", fontSize: 13, cursor: "pointer" },
   pre: { background: "#f8fafc", borderRadius: 8, padding: 12, fontSize: 12, overflowX: "auto", marginTop: 8 },
 };

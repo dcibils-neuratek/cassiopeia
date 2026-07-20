@@ -17,6 +17,7 @@ import {
 import type { Context, Json, ProcessDefinition, ProcessInstance } from "@cassiopeia/model";
 import {
   addEvent,
+  addNotification,
   bumpSchedule,
   completeCallback,
   completeTaskRow,
@@ -98,6 +99,7 @@ function onParked(def: ProcessDefinition, inst: ProcessInstance, result: Advance
         role: node.candidateRole ?? null,
         priority: node.priority ?? null,
       });
+      if (node.assignee) addNotification(node.assignee, "task-assigned", `Task "${node.name}" was assigned to you`, inst.id);
     }
   } else if (result.status === "sleeping") {
     const node = result.timer;
@@ -219,6 +221,7 @@ export function fireEscalations(): number {
   for (const t of listOverdueTasks(now)) {
     escalateTask(t.id);
     addEvent(t.instanceId, { type: "task.escalated", nodeId: t.nodeId, payload: { taskId: t.id, dueAt: t.dueAt ?? null } }, now);
+    if (t.assignee) addNotification(t.assignee, "sla-escalated", "A task assigned to you is overdue and was escalated to high priority", t.instanceId);
     n++;
   }
   return n;

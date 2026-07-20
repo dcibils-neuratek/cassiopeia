@@ -139,15 +139,18 @@ export function App() {
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{TITLES[mode]}</h1>
             <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>{HINTS[mode]}</div>
           </div>
-          {showPicker && (
-            <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
-              Process
-              <select value={defId} onChange={(e) => setDefId(e.target.value)} style={S.select}>
-                {defs.length === 0 && <option value={defId}>{defId}</option>}
-                {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </label>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {showPicker && (
+              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
+                Process
+                <select value={defId} onChange={(e) => setDefId(e.target.value)} style={S.select}>
+                  {defs.length === 0 && <option value={defId}>{defId}</option>}
+                  {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </label>
+            )}
+            <NotificationBell />
+          </div>
         </div>
 
         <div key={mode} className="fade-in" style={{ marginTop: 20 }}>
@@ -164,6 +167,51 @@ export function App() {
     </div>
   );
 }
+
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{ unread: number; items: { id: string; message: string; ts: string }[] }>({ unread: 0, items: [] });
+  async function load() { const r = await api("/notifications"); if (r.ok) setData(r.data); }
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
+  async function toggle() {
+    const willOpen = !open;
+    setOpen(willOpen);
+    if (willOpen && data.unread > 0) { await api("/notifications/read", { method: "POST" }); setData((d) => ({ ...d, unread: 0 })); }
+  }
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={toggle} title="Notifications" style={NB.btn}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+        {data.unread > 0 && <span style={NB.badge}>{data.unread}</span>}
+      </button>
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={() => setOpen(false)} />
+          <div style={NB.panel}>
+            <div style={NB.head}>Notifications</div>
+            <div style={{ maxHeight: 360, overflowY: "auto" }}>
+              {data.items.length === 0 && <div style={{ padding: 14, fontSize: 13, color: "var(--text-muted)" }}>Nothing yet.</div>}
+              {data.items.map((n) => (
+                <div key={n.id} style={NB.item}>
+                  <div style={{ fontSize: 13 }}>{n.message}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>{new Date(n.ts).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const NB: Record<string, React.CSSProperties> = {
+  btn: { position: "relative", width: 38, height: 38, borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  badge: { position: "absolute", top: -5, right: -5, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--danger)", color: "white", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
+  panel: { position: "absolute", right: 0, top: 46, width: 320, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "var(--shadow-lg)", zIndex: 40, overflow: "hidden" },
+  head: { padding: "10px 14px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)", fontWeight: 700, borderBottom: "1px solid var(--border)" },
+  item: { padding: "10px 14px", borderBottom: "1px solid var(--surface-3)" },
+};
 
 function Icon({ name }: { name: Mode | "settings" }) {
   const p: Record<string, React.ReactNode> = {

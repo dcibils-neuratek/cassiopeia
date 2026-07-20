@@ -92,7 +92,7 @@ BPMN-grade orchestration.
   call-activity**; **multi-instance** (loop over a collection); **SLA escalation**
   actions on breach (reassign / notify / branch).
 
-### M15 — Notifications & collaboration
+### M15 — Notifications & collaboration ✅
 - Email + in-app **notifications** (task assigned, SLA breach, run failed);
   **comments** on tasks/instances; Inbox **reassign / delegate / bulk**.
 

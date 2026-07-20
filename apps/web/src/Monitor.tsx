@@ -19,11 +19,21 @@ export function Monitor() {
   const openId = useRef<string | null>(null);
 
   const [retrying, setRetrying] = useState(false);
+  const [comments, setComments] = useState<{ id: string; author: string; text: string; ts: string }[]>([]);
+  const [commentText, setCommentText] = useState("");
   async function reloadList() { setList((await api("/instances")).data); }
+  async function loadComments(id: string) { const r = await api(`/instances/${id}/comments`); if (r.ok) setComments(r.data); }
   async function open(id: string) {
     openId.current = id;
     const r = await api(`/instances/${id}`);
     setDetail({ instance: r.data.instance, events: r.data.events, openTask: r.data.openTask, openTimer: r.data.openTimer });
+    loadComments(id);
+  }
+  async function postComment() {
+    const id = openId.current; const text = commentText.trim();
+    if (!id || !text) return;
+    await api(`/instances/${id}/comments`, { method: "POST", body: JSON.stringify({ text }) });
+    setCommentText(""); loadComments(id);
   }
   async function downloadCsv(id: string) {
     const res = await apiRaw(`/instances/${id}/audit.csv`);
@@ -134,6 +144,21 @@ export function Monitor() {
                 </li>
               ))}
             </ol>
+
+            <div style={{ ...S.head, marginTop: 16 }}>Comments</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "8px 0" }}>
+              {comments.map((c) => (
+                <div key={c.id} style={S.comment}>
+                  <div style={{ fontSize: 12 }}>{c.text}</div>
+                  <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 2 }}><b>{c.author}</b> · {new Date(c.ts).toLocaleString()}</div>
+                </div>
+              ))}
+              {comments.length === 0 && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No comments yet.</div>}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input style={S.commentInput} placeholder="Add a comment…" value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") postComment(); }} />
+              <button style={S.commentBtn} onClick={postComment}>Post</button>
+            </div>
           </>
         )}
       </div>
@@ -154,4 +179,7 @@ const S: Record<string, React.CSSProperties> = {
   dueBox: { background: "#f0f9ff", border: "1px solid #bae6fd", color: "#075985", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
   overdueBox: { background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
   csvLink: { fontSize: 11, color: "var(--primary)", background: "transparent", border: 0, cursor: "pointer", fontWeight: 700 },
+  comment: { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" },
+  commentInput: { flex: 1, border: "1px solid var(--border-strong)", borderRadius: 8, padding: "7px 10px", fontSize: 13 },
+  commentBtn: { background: "var(--primary)", color: "white", border: 0, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
 };

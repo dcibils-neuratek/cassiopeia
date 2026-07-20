@@ -144,6 +144,22 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       node_id TEXT NOT NULL,
       status TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      target TEXT,
+      read INTEGER NOT NULL DEFAULT 0,
+      ts TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS comments (
+      id TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      author TEXT NOT NULL,
+      text TEXT NOT NULL,
+      ts TEXT NOT NULL
+    );
   `);
   migrate();
 }
@@ -717,6 +733,38 @@ export function getCallback(token: string): CallbackRow | undefined {
 }
 export function completeCallback(token: string): void {
   db.prepare(`UPDATE callbacks SET status = 'done' WHERE token = ?`).run(token);
+}
+
+// ---- notifications (M15) ----
+
+export interface NotificationRow { id: string; type: string; message: string; target: string | null; read: number; ts: string }
+
+export function addNotification(userName: string, type: string, message: string, target?: string): void {
+  if (!userName) return;
+  db.prepare(`INSERT INTO notifications (id, user_name, type, message, target, read, ts) VALUES (?, ?, ?, ?, ?, 0, ?)`)
+    .run(randomUUID(), userName, type, message, target ?? null, new Date().toISOString());
+}
+export function listNotifications(userName: string, limit = 50): NotificationRow[] {
+  return db.prepare(`SELECT id, type, message, target, read, ts FROM notifications WHERE user_name = ? ORDER BY ts DESC LIMIT ?`).all(userName, limit) as unknown as NotificationRow[];
+}
+export function unreadCount(userName: string): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM notifications WHERE user_name = ? AND read = 0`).get(userName) as { n: number }).n;
+}
+export function markAllNotificationsRead(userName: string): void {
+  db.prepare(`UPDATE notifications SET read = 1 WHERE user_name = ?`).run(userName);
+}
+
+// ---- comments (M15) ----
+
+export interface CommentRow { id: string; author: string; text: string; ts: string }
+
+export function addComment(instanceId: string, author: string, text: string): CommentRow {
+  const c: CommentRow = { id: randomUUID(), author, text, ts: new Date().toISOString() };
+  db.prepare(`INSERT INTO comments (id, instance_id, author, text, ts) VALUES (?, ?, ?, ?, ?)`).run(c.id, instanceId, author, text, c.ts);
+  return c;
+}
+export function listComments(instanceId: string): CommentRow[] {
+  return db.prepare(`SELECT id, author, text, ts FROM comments WHERE instance_id = ? ORDER BY ts ASC`).all(instanceId) as unknown as CommentRow[];
 }
 
 export function listEvents(instanceId: string): StoredEvent[] {

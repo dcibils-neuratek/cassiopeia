@@ -15,6 +15,8 @@ import {
   initDb,
   listDefinitionVersions,
   addAudit,
+  addComment,
+  addNotification,
   claimTask,
   createSchedule,
   createTrigger,
@@ -22,7 +24,11 @@ import {
   deleteTrigger,
   getTrigger,
   listAudit,
+  listComments,
   listConnectors,
+  listNotifications,
+  markAllNotificationsRead,
+  unreadCount,
   listSchedules,
   listTriggers,
   listDefinitions,
@@ -132,6 +138,26 @@ app.post("/auth/users", async (req, reply) => {
 app.get("/audit", async (req, reply) => {
   if (!requireCap(req, reply, "admin")) return;
   return listAudit();
+});
+
+// ---- M15 notifications & comments ----
+app.get("/notifications", async (req) => {
+  const u = actor(req).username;
+  return { unread: unreadCount(u), items: listNotifications(u) };
+});
+app.post("/notifications/read", async (req) => {
+  markAllNotificationsRead(actor(req).username);
+  return { ok: true };
+});
+app.get("/instances/:id/comments", async (req) => {
+  const { id } = req.params as { id: string };
+  return listComments(id);
+});
+app.post("/instances/:id/comments", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const { text } = (req.body ?? {}) as { text?: string };
+  if (!text?.trim()) return reply.code(400).send({ ok: false, error: "text is required" });
+  return { ok: true, comment: addComment(id, actor(req).username, text.trim()) };
 });
 
 app.get("/health", async () => ({ ok: true }));
@@ -645,6 +671,23 @@ app.post("/tasks/:taskId/claim", async (req, reply) => {
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
   }
+});
+
+// Reassign a task to another user (current assignee or an admin).
+app.post("/tasks/:taskId/reassign", async (req, reply) => {
+  if (!requireCap(req, reply, "operate")) return;
+  const { taskId } = req.params as { taskId: string };
+  const user = actor(req);
+  const { assignee } = (req.body ?? {}) as { assignee?: string };
+  if (!assignee) return reply.code(400).send({ ok: false, error: "assignee is required" });
+  const task = getTask(taskId);
+  if (!can(user.role, "admin") && task.assignee !== user.username) {
+    return reply.code(403).send({ ok: false, error: "Only the current assignee or an admin can reassign" });
+  }
+  claimTask(taskId, assignee);
+  addNotification(assignee, "task-reassigned", `Task reassigned to you by ${user.username}`, task.instanceId);
+  addAudit(user.username, "task.reassign", `${taskId}->${assignee}`);
+  return { ok: true, assignee };
 });
 
 app.post("/tasks/:taskId/submit", async (req, reply) => {
