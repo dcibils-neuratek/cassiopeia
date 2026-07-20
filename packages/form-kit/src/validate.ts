@@ -3,10 +3,28 @@
 // (the context path) so expressions like "isCompany == true" read naturally.
 
 import type { FormDefinition, FormField, Json } from "@cassiopeia/model";
-import { evalBool } from "@cassiopeia/expr";
+import { evalBool, evaluate } from "@cassiopeia/expr";
 
 export type FormValues = Record<string, Json>;
 export type FormErrors = Record<string, string>;
+
+/** Evaluate all computed fields against the current values (derived, read-only). */
+export function computeDerived(form: FormDefinition, values: FormValues): FormValues {
+  const out: FormValues = { ...values };
+  for (const f of form.fields) {
+    if (f.kind === "computed" && f.expr) {
+      try { out[f.bind] = (evaluate(f.expr, out) ?? null) as Json; } catch { out[f.bind] = null; }
+    }
+  }
+  return out;
+}
+
+/** Distinct wizard pages present in the form (1-based, sorted). */
+export function formPages(form: FormDefinition): number[] {
+  const pages = new Set<number>();
+  for (const f of form.fields) pages.add(f.page ?? 1);
+  return [...pages].sort((a, b) => a - b);
+}
 
 export function isVisible(field: FormField, values: FormValues): boolean {
   if (!field.visibleIf) return true;
@@ -40,6 +58,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function validate(form: FormDefinition, values: FormValues): FormErrors {
   const errors: FormErrors = {};
   for (const field of form.fields) {
+    if (field.kind === "computed") continue; // derived, never user-validated
     if (!isVisible(field, values)) continue;
     const v = values[field.bind] ?? null;
 
@@ -78,11 +97,14 @@ export function initialValues(form: FormDefinition): FormValues {
   return out;
 }
 
-/** The submitted patch: only values for currently-visible fields. */
+/** The submitted patch: visible fields' values, plus derived (computed) values. */
 export function visiblePatch(form: FormDefinition, values: FormValues): FormValues {
+  const derived = computeDerived(form, values);
   const out: FormValues = {};
   for (const f of form.fields) {
-    if (isVisible(f, values) && values[f.bind] !== undefined) {
+    if (f.kind === "computed") {
+      if (derived[f.bind] !== undefined) out[f.bind] = derived[f.bind];
+    } else if (isVisible(f, values) && values[f.bind] !== undefined) {
       out[f.bind] = values[f.bind];
     }
   }

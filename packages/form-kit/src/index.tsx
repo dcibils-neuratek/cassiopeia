@@ -1,6 +1,7 @@
 // The one renderer used by BOTH the portal (runtime) and the designer preview
 // (M4) — so there is no behavior drift between what an analyst designs and what
 // a customer fills. Controlled, schema-driven, expr-powered visibility.
+// M16: multi-page wizard, computed (derived) fields, and real file upload.
 
 import { useMemo, useState } from "react";
 import type { FormDefinition, FormField, Json } from "@cassiopeia/model";
@@ -8,6 +9,8 @@ import {
   type FormErrors,
   type FormValues,
   coerce,
+  computeDerived,
+  formPages,
   initialValues,
   isVisible,
   validate,
@@ -21,26 +24,41 @@ export interface FormRendererProps {
   initial?: FormValues;
   submitLabel?: string;
   onSubmit: (patch: FormValues) => void | Promise<void>;
+  /** Optional real file upload; returns the value stored for the field (e.g. {fileId,name,size}). */
+  uploadFile?: (file: File) => Promise<Json>;
 }
 
-export function FormRenderer({ form, initial, submitLabel = "Submit", onSubmit }: FormRendererProps) {
+export function FormRenderer({ form, initial, submitLabel = "Submit", onSubmit, uploadFile }: FormRendererProps) {
   const [values, setValues] = useState<FormValues>(() => ({
     ...initialValues(form),
     ...(initial ?? {}),
   }));
   const [errors, setErrors] = useState<FormErrors>({});
   const [busy, setBusy] = useState(false);
+  const [pageIdx, setPageIdx] = useState(0);
+
+  const derived = useMemo(() => computeDerived(form, values), [form, values]);
+  const pages = useMemo(() => formPages(form), [form]);
+  const currentPage = pages[pageIdx];
+  const isLast = pageIdx >= pages.length - 1;
 
   const visibleFields = useMemo(
-    () => form.fields.filter((f) => isVisible(f, values)),
-    [form, values],
+    () => form.fields.filter((f) => (f.page ?? 1) === currentPage && isVisible(f, values)),
+    [form, values, currentPage],
   );
 
   const setField = (field: FormField, raw: unknown) =>
     setValues((v) => ({ ...v, [field.bind]: coerce(field, raw) }));
 
+  function pageHasErrors(): boolean {
+    const errs = validate(form, values);
+    setErrors(errs);
+    return visibleFields.some((f) => errs[f.bind]);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isLast) { if (!pageHasErrors()) setPageIdx((i) => i + 1); return; }
     const errs = validate(form, values);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -54,20 +72,38 @@ export function FormRenderer({ form, initial, submitLabel = "Submit", onSubmit }
 
   return (
     <form onSubmit={handleSubmit} style={s.form}>
+      {pages.length > 1 && (
+        <div style={s.steps}>
+          {pages.map((p, i) => (
+            <div key={p} style={{ ...s.step, ...(i === pageIdx ? s.stepActive : i < pageIdx ? s.stepDone : {}) }}>{i + 1}</div>
+          ))}
+          <span style={{ fontSize: 12, color: "#64748b", marginLeft: 8 }}>Step {pageIdx + 1} of {pages.length}</span>
+        </div>
+      )}
       {visibleFields.map((field) => (
         <div key={field.id} style={s.row}>
           <label style={s.label}>
             {field.label}
-            {field.required && <span style={{ color: "#dc2626" }}> *</span>}
+            {field.required && field.kind !== "computed" && <span style={{ color: "#dc2626" }}> *</span>}
           </label>
           {field.description && <div style={s.desc}>{field.description}</div>}
-          <FieldControl field={field} value={values[field.bind]} onChange={(raw) => setField(field, raw)} />
+          <FieldControl
+            field={field}
+            value={field.kind === "computed" ? derived[field.bind] : values[field.bind]}
+            onChange={(raw) => setField(field, raw)}
+            uploadFile={uploadFile}
+          />
           {errors[field.bind] && <div style={s.error}>{errors[field.bind]}</div>}
         </div>
       ))}
-      <button type="submit" disabled={busy} style={s.submit}>
-        {busy ? "Working…" : submitLabel}
-      </button>
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        {pages.length > 1 && pageIdx > 0 && (
+          <button type="button" onClick={() => setPageIdx((i) => i - 1)} style={s.back}>Back</button>
+        )}
+        <button type="submit" disabled={busy} style={s.submit}>
+          {busy ? "Working…" : isLast ? submitLabel : "Next"}
+        </button>
+      </div>
     </form>
   );
 }
@@ -76,10 +112,12 @@ function FieldControl({
   field,
   value,
   onChange,
+  uploadFile,
 }: {
   field: FormField;
   value: Json;
   onChange: (raw: unknown) => void;
+  uploadFile?: (file: File) => Promise<Json>;
 }) {
   const common = { style: s.input };
   switch (field.kind) {
@@ -130,18 +168,27 @@ function FieldControl({
           ))}
         </select>
       );
-    case "file":
-      // MVP: capture file metadata only. Real binary upload to object storage
-      // is a later milestone.
+    case "computed": {
+      const shown = value == null ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value);
+      return <div style={s.computed}>{shown}</div>;
+    }
+    case "file": {
+      const v = value as { name?: string; size?: number } | null;
       return (
-        <input
-          type="file"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            onChange(f ? { name: f.name, size: f.size } : null);
-          }}
-        />
+        <div>
+          <input
+            type="file"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) { onChange(null); return; }
+              if (uploadFile) onChange(await uploadFile(f));
+              else onChange({ name: f.name, size: f.size });
+            }}
+          />
+          {v?.name && <div style={s.fileTag}>📎 {v.name}{typeof v.size === "number" ? ` (${Math.round(v.size / 1024)} KB)` : ""}</div>}
+        </div>
       );
+    }
   }
 }
 
@@ -151,6 +198,13 @@ const s: Record<string, React.CSSProperties> = {
   label: { fontSize: 13, fontWeight: 600, color: "#334155" },
   desc: { fontSize: 12, color: "#64748b" },
   input: { border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14 },
+  computed: { border: "1px dashed #cbd5e1", background: "#f8fafc", borderRadius: 8, padding: "8px 10px", fontSize: 14, color: "#0f172a", fontWeight: 600 },
+  fileTag: { fontSize: 12, color: "#0f172a", marginTop: 4 },
   error: { fontSize: 12, color: "#dc2626" },
-  submit: { background: "#2563eb", color: "white", border: 0, borderRadius: 8, padding: "10px 16px", fontSize: 14, cursor: "pointer", marginTop: 4 },
+  submit: { background: "#2563eb", color: "white", border: 0, borderRadius: 8, padding: "10px 16px", fontSize: 14, cursor: "pointer" },
+  back: { background: "white", color: "#334155", border: "1px solid #cbd5e1", borderRadius: 8, padding: "10px 16px", fontSize: 14, cursor: "pointer" },
+  steps: { display: "flex", alignItems: "center", gap: 6, marginBottom: 4 },
+  step: { width: 24, height: 24, borderRadius: 12, background: "#e2e8f0", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 },
+  stepActive: { background: "#2563eb", color: "white" },
+  stepDone: { background: "#16a34a", color: "white" },
 };

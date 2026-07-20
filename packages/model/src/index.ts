@@ -185,7 +185,8 @@ export type FieldKind =
   | "email"
   | "select"
   | "checkbox"
-  | "file";
+  | "file"
+  | "computed"; // read-only, value derived from an expression over the form
 
 export interface FieldOption {
   label: string;
@@ -208,6 +209,10 @@ export interface FormField {
   pattern?: string; // text/email regex
   /** Shown only when this expression is truthy, evaluated against form values. */
   visibleIf?: Expr;
+  /** For kind "computed": expression over the other fields' values. */
+  expr?: Expr;
+  /** Wizard page (1-based) this field belongs to. Fields with no page are page 1. */
+  page?: number;
 }
 
 export interface FormDefinition {

@@ -19,7 +19,7 @@ import { FormRenderer } from "@cassiopeia/form-kit";
 import { api } from "./api.js";
 
 const uid = () => Math.random().toString(36).slice(2, 7);
-const KINDS: FieldKind[] = ["text", "email", "number", "date", "select", "checkbox", "file"];
+const KINDS: FieldKind[] = ["text", "email", "number", "date", "select", "checkbox", "file", "computed"];
 
 export function FormDesigner({
   fixedFormId,
@@ -233,6 +233,13 @@ function FieldProps({ field, onChange }: { field: FormField; onChange: (p: Parti
         </>
       )}
 
+      {field.kind === "computed" && (
+        <>
+          <L>Expression (over other fields)</L>
+          <input style={S.input} placeholder="e.g. price * quantity" value={field.expr ?? ""} onChange={(e) => onChange({ expr: e.target.value || undefined })} />
+        </>
+      )}
+
       {field.kind === "select" && (
         <>
           <L>Options (one per line: Label|value)</L>
@@ -256,6 +263,8 @@ function FieldProps({ field, onChange }: { field: FormField; onChange: (p: Parti
 
       <L>Visible if (expression)</L>
       <input style={S.input} placeholder="e.g. isCompany == true" value={field.visibleIf ?? ""} onChange={(e) => onChange({ visibleIf: e.target.value || undefined })} />
+      <L>Wizard page</L>
+      <input style={S.input} type="number" min={1} placeholder="1" value={field.page ?? ""} onChange={(e) => onChange({ page: e.target.value === "" ? undefined : Math.max(1, Number(e.target.value) || 1) })} />
     </div>
   );
 }

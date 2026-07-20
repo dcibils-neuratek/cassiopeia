@@ -9,6 +9,7 @@ import {
   getDefinition,
   getEditableDefinition,
   eventDailyCounts,
+  getFile,
   getForm,
   getInstance,
   getTask,
@@ -43,8 +44,10 @@ import {
   openTimerForInstance,
   saveConnector,
   saveDefinition,
+  saveFile,
   saveForm,
 } from "./db.js";
+import { randomUUID } from "node:crypto";
 import { seedSample } from "./sample.js";
 import { listTemplates, installTemplate } from "./templates.js";
 import { describeProcess } from "./describe.js";
@@ -55,7 +58,7 @@ import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBund
 import { computeAnalytics, analyzeProcess } from "./analytics.js";
 import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, bodyLimit: 20 * 1024 * 1024 }); // allow base64 file uploads
 await app.register(cors, { origin: true });
 
 initDb();
@@ -365,6 +368,25 @@ app.get("/definitions/:id/data-dictionary", async (req, reply) => {
   } catch (err) {
     return reply.code(404).send({ ok: false, error: (err as Error).message });
   }
+});
+
+// ---- M16 file upload (base64 JSON, no extra deps) ----
+app.post("/files", async (req, reply) => {
+  const { name, mime, contentBase64 } = (req.body ?? {}) as { name?: string; mime?: string; contentBase64?: string };
+  if (!name || !contentBase64) return reply.code(400).send({ ok: false, error: "name and contentBase64 required" });
+  const id = randomUUID();
+  const size = Math.floor((contentBase64.length * 3) / 4);
+  saveFile(id, name, mime ?? "application/octet-stream", size, contentBase64);
+  return { ok: true, fileId: id, name, size, mime: mime ?? "application/octet-stream" };
+});
+
+app.get("/files/:id", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const f = getFile(id);
+  if (!f) return reply.code(404).send({ ok: false, error: "file not found" });
+  reply.header("content-type", f.mime);
+  reply.header("content-disposition", `inline; filename="${f.name.replace(/"/g, "")}"`);
+  return reply.send(Buffer.from(f.content, "base64"));
 });
 
 app.get("/forms", async () => listForms());

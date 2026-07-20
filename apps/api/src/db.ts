@@ -160,6 +160,14 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       text TEXT NOT NULL,
       ts TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS files (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
   migrate();
 }
@@ -765,6 +773,19 @@ export function addComment(instanceId: string, author: string, text: string): Co
 }
 export function listComments(instanceId: string): CommentRow[] {
   return db.prepare(`SELECT id, author, text, ts FROM comments WHERE instance_id = ? ORDER BY ts ASC`).all(instanceId) as unknown as CommentRow[];
+}
+
+// ---- uploaded files (M16) — stored base64 in the DB (fine for demo scale) ----
+
+export function saveFile(id: string, name: string, mime: string, size: number, contentBase64: string): void {
+  db.prepare(`INSERT INTO files (id, name, mime, size, content, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(id, name, mime, size, contentBase64, new Date().toISOString());
+}
+export function getFile(id: string): { name: string; mime: string; size: number; content: string } | undefined {
+  const r = db.prepare(`SELECT name, mime, size, content FROM files WHERE id = ?`).get(id) as
+    | { name: string; mime: string; size: number; content: string }
+    | undefined;
+  return r;
 }
 
 export function listEvents(instanceId: string): StoredEvent[] {

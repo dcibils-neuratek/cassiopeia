@@ -28,3 +28,17 @@ export const api = (path: string, opts: RequestInit = {}) =>
 /** Authenticated raw fetch (for non-JSON responses like CSV downloads). */
 export const apiRaw = (path: string, opts: RequestInit = {}) =>
   fetch(`/api${path}`, { ...opts, headers: authHeaders(Boolean(opts.body), opts.headers) });
+
+function toBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
+
+/** Upload a File and return the value to store on the form field. */
+export async function uploadFile(file: File): Promise<{ fileId: string; name: string; size: number; mime: string }> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const r = await api("/files", { method: "POST", body: JSON.stringify({ name: file.name, mime: file.type, contentBase64: toBase64(bytes) }) });
+  return r.data;
+}

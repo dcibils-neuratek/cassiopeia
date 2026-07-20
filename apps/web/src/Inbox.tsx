@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormDefinition } from "@cassiopeia/model";
 import { FormRenderer, type FormValues } from "@cassiopeia/form-kit";
-import { api } from "./api.js";
+import { api, uploadFile } from "./api.js";
 
 type Task = {
   id: string; instanceId: string; nodeId: string; formId: string | null;
@@ -136,7 +136,7 @@ export function Inbox({ me }: { me: string }) {
               <button style={S.reassignBtn} disabled={busy || !reassignTo.trim()} onClick={() => reassign(sel)}>Reassign</button>
             </div>
             <div style={{ marginTop: 12 }}>
-              {sel.formId && form && <FormRenderer key={sel.id} form={form} initial={sel.context as any} submitLabel={busy ? "Working…" : "Complete task"} onSubmit={complete} />}
+              {sel.formId && form && <FormRenderer key={sel.id} form={form} initial={sel.context as any} submitLabel={busy ? "Working…" : "Complete task"} onSubmit={complete} uploadFile={uploadFile} />}
               {sel.formId && !form && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Loading form…</p>}
               {!sel.formId && (
                 <>
