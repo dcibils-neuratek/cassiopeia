@@ -90,7 +90,7 @@ export function Designer({ defId }: { defId: string }) {
   const [testOut, setTestOut] = useState("");
   const [runOpen, setRunOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
-  const [descCfg, setDescCfg] = useState({ baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5", apiKey: "" });
+  const [descCfg, setDescCfg] = useState({ baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5-20251001", apiKey: "" });
   const [description, setDescription] = useState("");
   const [descBusy, setDescBusy] = useState(false);
   const [descErr, setDescErr] = useState("");
@@ -295,7 +295,7 @@ export function Designer({ defId }: { defId: string }) {
     setDescription(""); setDescErr("");
     const r = await api(`/connectors`);
     const d = (r.data as Connector[]).find((c) => c.id === "describer");
-    if (d) setDescCfg({ baseUrl: d.config.baseUrl ?? "", model: d.config.model ?? "claude-haiku-4-5", apiKey: d.config.apiKey ?? "" });
+    if (d) setDescCfg({ baseUrl: d.config.baseUrl ?? "", model: d.config.model ?? "claude-haiku-4-5-20251001", apiKey: d.config.apiKey ?? "" });
     setDescOpen(true);
   }
   async function saveDescriber() {

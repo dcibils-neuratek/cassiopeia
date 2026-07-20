@@ -150,7 +150,7 @@ export function seedSample(): void {
     type: "ai-agent",
     config: {
       baseUrl: "https://api.anthropic.com/v1",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-4-5-20251001",
       apiKey: "",
       jsonOutput: false,
     },

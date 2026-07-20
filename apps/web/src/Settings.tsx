@@ -6,7 +6,7 @@ type Connector = { id: string; type: string; config: Record<string, any> };
 
 export function Settings() {
   const [connectors, setConnectors] = useState<Connector[]>([]);
-  const [describer, setDescriber] = useState<Connector>({ id: "describer", type: "ai-agent", config: { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5", apiKey: "", jsonOutput: false } });
+  const [describer, setDescriber] = useState<Connector>({ id: "describer", type: "ai-agent", config: { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5-20251001", apiKey: "", jsonOutput: false } });
   const [selId, setSelId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [testInput, setTestInput] = useState('{ "income": 1200 }');
@@ -92,13 +92,20 @@ export function Settings() {
 
       {/* ---- LLM keys ---- */}
       <section style={{ ...S.card, marginTop: 18 }}>
-        <h2 style={S.h2}>Process description model (LLM)</h2>
-        <p style={S.hint}>The LLM used by <b>✦ Describe</b>. Defaults to Claude Haiku via Anthropic's OpenAI-compatible endpoint; any OpenAI-compatible provider works.</p>
+        <h2 style={S.h2}>Platform AI model (LLM)</h2>
+        <p style={S.hint}>Powers <b>✦ Describe</b>, <b>✦ Build with AI</b>, and the <b>AI process analyst</b>. Defaults to Claude via Anthropic's OpenAI-compatible endpoint; any OpenAI-compatible provider works. The key is <b>encrypted at rest</b> and shown masked — leave it blank to keep the stored key.</p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
-          <div style={{ flex: "1 1 150px" }}><L>Model</L><input style={S.input} value={describer.config.model ?? ""} onChange={(e) => setDescriber({ ...describer, config: { ...describer.config, model: e.target.value } })} /></div>
+          <div style={{ flex: "1 1 200px" }}><L>Model</L><input style={S.input} value={describer.config.model ?? ""} onChange={(e) => setDescriber({ ...describer, config: { ...describer.config, model: e.target.value } })} /></div>
           <div style={{ flex: "2 1 240px" }}><L>Base URL</L><input style={S.input} value={describer.config.baseUrl ?? ""} onChange={(e) => setDescriber({ ...describer, config: { ...describer.config, baseUrl: e.target.value } })} /></div>
-          <div style={{ flex: "1 1 160px" }}><L>API key</L><input style={S.input} type="password" value={describer.config.apiKey ?? ""} onChange={(e) => setDescriber({ ...describer, config: { ...describer.config, apiKey: e.target.value } })} /></div>
-          <button style={S.primary} onClick={() => save({ ...describer, type: "ai-agent", config: { ...describer.config, jsonOutput: false } }, "Description model saved")}>Save</button>
+          <div style={{ flex: "1 1 160px" }}><L>API key</L><input style={S.input} type="password" placeholder="unchanged if left blank" value={describer.config.apiKey ?? ""} onChange={(e) => setDescriber({ ...describer, config: { ...describer.config, apiKey: e.target.value } })} /></div>
+          <button style={S.primary} onClick={() => save({ ...describer, type: "ai-agent", config: { ...describer.config, jsonOutput: false } }, "Platform model saved")}>Save</button>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={S.hint}>Claude models:</span>
+          {[["Haiku", "claude-haiku-4-5-20251001"], ["Sonnet", "claude-sonnet-5"], ["Opus", "claude-opus-4-8"]].map(([label, id]) => (
+            <button key={id} style={{ ...S.ghost, ...(describer.config.model === id ? { border: "1px solid var(--primary)", background: "var(--primary-tint)" } : {}) }}
+              onClick={() => setDescriber({ ...describer, config: { ...describer.config, model: id, baseUrl: "https://api.anthropic.com/v1" } })}>{label}</button>
+          ))}
         </div>
       </section>
 

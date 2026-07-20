@@ -104,7 +104,7 @@ export async function generateWorkflow(
   connectorIds: string[] = [],
   override?: { baseUrl?: string; apiKey?: string; model?: string },
 ): Promise<{ reply: string; definition: ProcessDefinition; forms: FormDefinition[]; connectors: { id: string; type: string; config: Record<string, any> }[]; errors: string[] }> {
-  let cfg: Record<string, any> = { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5", apiKey: "" };
+  let cfg: Record<string, any> = { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5-20251001", apiKey: "" };
   try { cfg = { ...cfg, ...getConnector("describer").config }; } catch { /* not seeded */ }
   for (const [k, v] of Object.entries(override ?? {})) if (v != null && v !== "") cfg[k] = v;
   if (!cfg.apiKey) throw new Error("No API key set for the AI builder. Add it in Settings → Process description model.");
