@@ -1,0 +1,17 @@
+# Run Cassiopeia in a container:  docker compose up --build
+# Then open http://localhost:5173  (sign in with admin / admin on first run).
+services:
+  cassiopeia:
+    build: .
+    ports:
+      - "5173:5173" # web
+      - "3001:3001" # api
+    environment:
+      # Set a stable secret in real deployments; without it a key is generated
+      # into the data volume on first run.
+      CASSIOPEIA_SECRET_KEY: ${CASSIOPEIA_SECRET_KEY:-}
+    volumes:
+      - cassiopeia-data:/app/apps/api/data
+
+volumes:
+  cassiopeia-data:

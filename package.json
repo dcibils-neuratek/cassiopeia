@@ -10,7 +10,8 @@
     "demo": "pnpm --filter @cassiopeia/api demo",
     "dev:api": "pnpm --filter @cassiopeia/api dev",
     "dev:web": "pnpm --filter @cassiopeia/web dev",
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
+    "test": "node --import tsx --test packages/expr/test/*.test.ts packages/engine/test/*.test.ts packages/form-kit/test/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

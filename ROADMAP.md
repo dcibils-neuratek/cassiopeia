@@ -100,7 +100,7 @@ BPMN-grade orchestration.
 - **File upload** with a storage backend; **multi-page** forms; **repeating
   groups/panels**; **computed/derived** fields; pass documents to agents.
 
-### M17 — Quality & delivery
+### M17 — Quality & delivery ✅
 - Test suites (**engine / expr / API**) + **CI**; **Dockerfile / compose**; env
   config; **Postgres via Drizzle** (repo layer already isolates SQL); dev/test/prod
   environments + promotion.

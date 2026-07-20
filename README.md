@@ -53,6 +53,33 @@ pnpm dev:api     # API only, on http://localhost:3001
 pnpm dev:web     # web only, on http://localhost:5173 (proxies /api -> :3001)
 ```
 
+## Testing & deployment
+
+```bash
+pnpm typecheck   # types across all packages + web
+pnpm test        # engine / expr / form-kit unit tests (node:test)
+```
+
+CI runs typecheck + tests on every push/PR (`.github/workflows/ci.yml`).
+
+Run it in a container:
+
+```bash
+docker compose up --build      # → http://localhost:5173  (admin / admin)
+```
+
+**Configuration (env):**
+
+| Var | Purpose |
+| --- | --- |
+| `PORT` | API port (default 3001) |
+| `CASSIOPEIA_SECRET_KEY` | Key for encrypting connector secrets at rest — **set in production**; a dev key is generated to `apps/api/data/secret.key` if unset |
+| `API_TARGET` | Web dev-server proxy target for the API (default `http://localhost:3001`) |
+
+**Postgres:** all SQL lives behind the thin repo in `apps/api/src/db.ts`; moving
+from `node:sqlite` to Postgres (via Drizzle) is a matter of reimplementing that one
+module — callers and the engine are untouched.
+
 ## Design decisions
 
 - **Custom TS engine + React Flow** (not BPMN, not Temporal) — full control,
