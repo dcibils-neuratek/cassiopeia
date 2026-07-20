@@ -125,6 +125,7 @@ process, forms, and connectors and drops you into **Build** to see the wiring:
 - **Mortgage Simulator** — request → compute payment/affordability → offer or adjust
 - **Personal Credit Request** — application → credit score → instant approval or underwriting
 - **Card Travel Notification** — trip details → register with the card network → confirm
+- **Loan Pre-Approval** — application → automated credit check → score gateway → human underwriter (SLA/priority) or auto-approve → offer computation → sign-off (a full human-in-the-loop flow with a join)
 
 Templates run out of the box on deterministic mock connectors (`mock-mortgage`,
 `mock-credit-score`, `mock-travel-register`) — swap any for a real API or the AI
