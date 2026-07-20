@@ -26,11 +26,13 @@ import {
   createTimer,
   dueSchedules,
   dueTimers,
+  escalateTask,
   fireTimerRow,
   getCallback,
   getDefinition,
   getInstance,
   getTask,
+  listOverdueTasks,
   openTaskForInstance,
   saveInstance,
 } from "./db.js";
@@ -47,8 +49,27 @@ function depsFor(instanceId: string): EngineDeps {
         { connectorId, emitUsage: (usage) => emit({ type: "agent.usage", nodeId: connectorId, payload: usage }) },
         () => runConnector(connectorId, input),
       ),
+    runSubprocess,
     emit,
   };
+}
+
+/**
+ * Call-activity: run another published process to completion (in-process) and
+ * return its final context. Persists a child instance for auditability. The
+ * sub-process must complete synchronously — a human task inside it is an error.
+ */
+async function runSubprocess(processId: string, input: Context): Promise<Context> {
+  const def = getDefinition(processId);
+  const child = createInstance(def.id, def.version, def.startNodeId);
+  child.context = { ...input };
+  addEvent(child.id, { type: "instance.started", payload: { subprocess: true } }, new Date().toISOString());
+  const result = await advance(def, child, depsFor(child.id));
+  saveInstance(child);
+  if (result.status !== "completed") {
+    throw new Error(`Subprocess '${processId}' did not complete synchronously (status: ${result.status}). Sub-processes must be fully automated.`);
+  }
+  return child.context;
 }
 
 function getPath(ctx: Context, path: string): Json | undefined {
@@ -191,11 +212,24 @@ export async function fireDueSchedules(): Promise<number> {
   return started;
 }
 
-/** Poll for due timers and schedules on an interval. Returns a stop function. */
+/** Escalate open tasks that have blown their SLA (bump to high priority + audit). */
+export function fireEscalations(): number {
+  const now = new Date().toISOString();
+  let n = 0;
+  for (const t of listOverdueTasks(now)) {
+    escalateTask(t.id);
+    addEvent(t.instanceId, { type: "task.escalated", nodeId: t.nodeId, payload: { taskId: t.id, dueAt: t.dueAt ?? null } }, now);
+    n++;
+  }
+  return n;
+}
+
+/** Poll for due timers, schedules, and SLA escalations. Returns a stop function. */
 export function startScheduler(intervalMs = 1000): () => void {
   const t = setInterval(() => {
     fireDueTimers().catch(() => { /* logged via events */ });
     fireDueSchedules().catch(() => { /* def may be gone */ });
+    try { fireEscalations(); } catch { /* best-effort */ }
   }, intervalMs);
   if (typeof t.unref === "function") t.unref();
   return () => clearInterval(t);

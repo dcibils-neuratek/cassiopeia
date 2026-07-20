@@ -163,6 +163,7 @@ function migrate(): void {
   addColumnIfMissing("tasks", "assignee", "assignee TEXT");
   addColumnIfMissing("tasks", "role", "role TEXT");
   addColumnIfMissing("tasks", "priority", "priority TEXT");
+  addColumnIfMissing("tasks", "escalated", "escalated INTEGER DEFAULT 0");
 }
 
 // ---- definitions ----
@@ -483,6 +484,18 @@ export function listOpenTasks(): TaskRow[] {
 
 export function completeTaskRow(id: string): void {
   db.prepare(`UPDATE tasks SET status = 'completed' WHERE id = ?`).run(id);
+}
+
+/** Open tasks past their due date that haven't been escalated yet. */
+export function listOverdueTasks(nowIso: string): TaskRow[] {
+  const rows = db
+    .prepare(`SELECT * FROM tasks WHERE status = 'open' AND due_at IS NOT NULL AND due_at <= ? AND (escalated IS NULL OR escalated = 0)`)
+    .all(nowIso) as Record<string, unknown>[];
+  return rows.map(rowToTask);
+}
+
+export function escalateTask(id: string): void {
+  db.prepare(`UPDATE tasks SET escalated = 1, priority = 'high' WHERE id = ?`).run(id);
 }
 
 // ---- timers ----

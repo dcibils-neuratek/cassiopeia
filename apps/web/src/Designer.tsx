@@ -32,6 +32,7 @@ const NODE_UI: Record<string, { color: string }> = {
   serviceTask: { color: "#7c3aed" },
   gateway: { color: "#d97706" },
   timer: { color: "#0891b2" },
+  subprocess: { color: "#0d9488" },
 };
 
 function label(n: ModelNode): string {
@@ -46,7 +47,8 @@ function CassNode({ data, selected }: { data: { node: ModelNode }; selected: boo
   const sub =
     n.type === "userTask" ? (n.formId ? "📝 form attached" : "no form yet") :
     n.type === "serviceTask" ? (n.connectorId ? `⚙ ${n.connectorId}` : "no connector") :
-    n.type === "timer" ? (n.untilPath ? `⏱ until ${n.untilPath}` : `⏱ ${n.delaySeconds ?? 0}s`) : "";
+    n.type === "timer" ? (n.untilPath ? `⏱ until ${n.untilPath}` : `⏱ ${n.delaySeconds ?? 0}s`) :
+    n.type === "subprocess" ? (n.processId ? `⤷ ${n.processId}` : "no process") : "";
   return (
     <div
       style={{
@@ -80,6 +82,7 @@ export function Designer({ defId }: { defId: string }) {
   const [sel, setSel] = useState<Sel>(null);
   const [forms, setForms] = useState<{ id: string; title: string }[]>([]);
   const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [allDefs, setAllDefs] = useState<{ id: string; name: string }[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [formDrawerId, setFormDrawerId] = useState<string | null>(null);
@@ -134,6 +137,8 @@ export function Designer({ defId }: { defId: string }) {
       const defRes = await api(`/definitions/${DEF_ID}/edit`);
       await reloadForms();
       await reloadConnectors();
+      const dl = await api(`/definitions`);
+      if (dl.ok) setAllDefs(dl.data.map((d: any) => ({ id: d.id, name: d.name })));
       applyDef(defRes.data as ProcessDefinition);
     })();
   }, []);
@@ -149,6 +154,7 @@ export function Designer({ defId }: { defId: string }) {
     else if (type === "serviceTask") node = { id, type, name: "Service Task", connectorId: "" };
     else if (type === "gateway") node = { id, type, name: "Gateway", branches: [], defaultEdgeId: "" };
     else if (type === "timer") node = { id, type, name: "Wait", delaySeconds: 60 };
+    else if (type === "subprocess") node = { id, type, name: "Subprocess", processId: "" };
     else if (type === "end") node = { id, type };
     else node = { id, type: "start" };
     const spawn = 80 + nodes.length * 20;
@@ -362,7 +368,7 @@ export function Designer({ defId }: { defId: string }) {
       <div style={S.toolbar}>
         <input style={S.nameInput} value={name} onChange={(e) => setName(e.target.value)} />
         <span style={{ fontSize: 12, color: "#94a3b8" }}>Add:</span>
-        {(["userTask", "serviceTask", "gateway", "timer", "end", "start"] as const).map((t) => (
+        {(["userTask", "serviceTask", "gateway", "timer", "subprocess", "end", "start"] as const).map((t) => (
           <button key={t} style={S.paletteBtn} onClick={() => addNode(t)}>+ {t}</button>
         ))}
         <div style={{ flex: 1 }} />
@@ -478,6 +484,18 @@ export function Designer({ defId }: { defId: string }) {
                     value={(selNode as any).untilPath ?? ""}
                     onChange={(e) => updateNode(selNode.id, { untilPath: e.target.value || undefined } as any)} />
                   <p style={S.hint}>The engine parks here; a scheduler resumes the run once the time passes. A date path wins over the fixed delay when it resolves.</p>
+                </>
+              )}
+
+              {selNode.type === "subprocess" && (
+                <>
+                  <L>Sub-process</L>
+                  <select style={S.input} value={(selNode as any).processId ?? ""} onChange={(e) => updateNode(selNode.id, { processId: e.target.value } as any)}>
+                    <option value="">(pick a process)</option>
+                    {allDefs.filter((d) => d.id !== DEF_ID).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  <p style={S.hint}>Runs another process to completion and merges its result. It must be fully automated (no human tasks).</p>
+                  <MultiInstanceFields node={selNode} onChange={(mi) => updateNode(selNode.id, { multiInstance: mi } as any)} />
                 </>
               )}
 
@@ -833,6 +851,30 @@ function ServiceInspector({
         </select>
         {node.onErrorEdgeId && <p style={S.hint}>On error, the run continues down this edge with the failure in <code>error</code>.</p>}
       </div>
+
+      <MultiInstanceFields node={node} onChange={(mi) => onPatch({ multiInstance: mi } as any)} />
+    </div>
+  );
+}
+
+function MultiInstanceFields({ node, onChange }: { node: any; onChange: (mi: any) => void }) {
+  const mi = node.multiInstance;
+  return (
+    <div style={{ marginTop: 10, borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
+      <label style={S.check}>
+        <input type="checkbox" checked={!!mi} onChange={(e) => onChange(e.target.checked ? { collectionPath: "items", itemKey: "item", resultPath: "results" } : undefined)} />
+        Fan-out: run once per item of a collection
+      </label>
+      {mi && (
+        <>
+          <L>Collection path</L>
+          <input style={S.input} value={mi.collectionPath ?? ""} placeholder="e.g. applicants" onChange={(e) => onChange({ ...mi, collectionPath: e.target.value })} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}><L>Item key</L><input style={S.input} value={mi.itemKey ?? ""} placeholder="item" onChange={(e) => onChange({ ...mi, itemKey: e.target.value })} /></div>
+            <div style={{ flex: 1 }}><L>Result path</L><input style={S.input} value={mi.resultPath ?? ""} placeholder="results" onChange={(e) => onChange({ ...mi, resultPath: e.target.value })} /></div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

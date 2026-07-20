@@ -30,7 +30,18 @@ export type NodeType =
   | "userTask"
   | "serviceTask"
   | "gateway"
-  | "timer";
+  | "timer"
+  | "subprocess";
+
+/**
+ * Fan-out a task over a collection: run it once per item in `collectionPath`,
+ * passing each item under `itemKey`, and collect the results into `resultPath`.
+ */
+export interface MultiInstance {
+  collectionPath: ContextPath;
+  itemKey?: string; // default "item"
+  resultPath?: ContextPath; // default "results"
+}
 
 export interface StartNode {
   id: string;
@@ -70,6 +81,21 @@ export interface TimerNode {
   delaySeconds?: number;
   untilPath?: ContextPath;
 }
+
+/**
+ * Call-activity: run another published process to completion and merge its final
+ * context back. The sub-process must complete synchronously (no human tasks).
+ */
+export interface SubprocessNode {
+  id: string;
+  type: "subprocess";
+  name: string;
+  processId: string;
+  inputMap?: Mapping;
+  outputMap?: Mapping;
+  /** Run the sub-process once per item of a context collection (fan-out). */
+  multiInstance?: MultiInstance;
+}
 export interface ServiceTaskNode {
   id: string;
   type: "serviceTask";
@@ -77,6 +103,8 @@ export interface ServiceTaskNode {
   connectorId: string;
   inputMap?: Mapping;
   outputMap?: Mapping;
+  /** Run the connector once per item of a context collection (fan-out). */
+  multiInstance?: MultiInstance;
   /** Retry policy for the connector call. */
   retries?: number; // extra attempts after the first (0 = no retry)
   retryDelayMs?: number; // base backoff; doubles each attempt
@@ -107,7 +135,8 @@ export type Node =
   | UserTaskNode
   | ServiceTaskNode
   | GatewayNode
-  | TimerNode;
+  | TimerNode
+  | SubprocessNode;
 
 export interface Edge {
   id: string;

@@ -86,7 +86,7 @@ Start processes from the outside; support long-running agents.
 - Inbound **webhooks / API** to start instances; **scheduled (cron)** starts.
 - **Async connectors** with callback (agent replies later → resume via a token).
 
-### M14 — Engine expressiveness
+### M14 — Engine expressiveness ✅ (parallel multi-token gateways still future)
 BPMN-grade orchestration.
 - **Parallel gateways** (fork/join, multiple active tokens); **subprocess /
   call-activity**; **multi-instance** (loop over a collection); **SLA escalation**

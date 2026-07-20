@@ -7,6 +7,7 @@ import {
   type Context,
   type Json,
   type Mapping,
+  type MultiInstance,
   type ProcessDefinition,
   type ServiceTaskNode,
   type ProcessInstance,
@@ -30,6 +31,8 @@ export interface EngineEvent {
     | "service.pending"
     | "callback.received"
     | "agent.usage"
+    | "subprocess.completed"
+    | "task.escalated"
     | "gateway.evaluated"
     | "timer.scheduled"
     | "timer.fired"
@@ -42,6 +45,8 @@ export interface EngineEvent {
 export interface EngineDeps {
   /** Execute a connector and return its result. The only I/O the engine does. */
   runConnector(connectorId: string, input: Context): Promise<Context>;
+  /** Run another process to completion and return its final context (call-activity). */
+  runSubprocess?(processId: string, input: Context): Promise<Context>;
   /** Append an event to the audit log. */
   emit(event: EngineEvent): void;
 }
@@ -101,6 +106,10 @@ export function validateDefinition(def: ProcessDefinition): string[] {
       case "timer":
         if (out.length !== 1) errors.push(`Timer '${node.name}' must have exactly one outgoing edge`);
         if (!node.delaySeconds && !node.untilPath) errors.push(`Timer '${node.name}' needs a delay or an 'until' path`);
+        break;
+      case "subprocess":
+        if (!node.processId) errors.push(`Subprocess '${node.name}' has no target process`);
+        if (out.length !== 1) errors.push(`Subprocess '${node.name}' must have exactly one outgoing edge`);
         break;
       case "start":
         if (out.length !== 1) errors.push(`Start must have exactly one outgoing edge`);
@@ -177,6 +186,28 @@ function serviceNext(def: ProcessDefinition, node: ServiceTaskNode): string {
   return edges[0].to;
 }
 
+/**
+ * Fan-out: run `runOne` for each item of the collection at `mi.collectionPath`,
+ * passing the item under `mi.itemKey`, and collect the outputs into
+ * `mi.resultPath` (default "results").
+ */
+async function runMulti(
+  mi: MultiInstance,
+  ctx: Context,
+  baseInput: Context,
+  runOne: (itemInput: Context) => Promise<Context>,
+): Promise<void> {
+  const arr = getPath(ctx, mi.collectionPath);
+  const items = Array.isArray(arr) ? arr : [];
+  const key = mi.itemKey ?? "item";
+  const results: Json[] = [];
+  for (const item of items) {
+    const out = await runOne({ ...baseInput, [key]: item });
+    results.push(out as Json);
+  }
+  setPath(ctx, mi.resultPath ?? "results", results as Json);
+}
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Reject a connector call that runs longer than `ms` (0 disables the timeout). */
@@ -248,14 +279,30 @@ export async function advance(
         }
         case "serviceTask": {
           const input = applyInputMap(instance.context, node.inputMap);
-          let result: Context;
           try {
-            result = await runWithPolicy(node, input, deps);
+            // Fan-out: run the connector once per item of a collection.
+            if (node.multiInstance) {
+              await runMulti(node.multiInstance, instance.context, input, (itemInput) => runWithPolicy(node, itemInput, deps));
+              deps.emit({ type: "service.completed", nodeId: node.id, payload: { multiInstance: node.multiInstance.collectionPath } });
+              instance.currentNodeId = serviceNext(def, node);
+              break;
+            }
+            const result = await runWithPolicy(node, input, deps);
+            // Async connector: parks until resumeCallback() arrives.
+            if (result && (result as Record<string, Json>).__awaitCallback) {
+              instance.status = "waiting";
+              const token = String((result as Record<string, Json>).__callbackToken ?? "");
+              deps.emit({ type: "service.pending", nodeId: node.id, payload: { token } });
+              return { status: "awaiting", node, token };
+            }
+            applyOutputMap(instance.context, result, node.outputMap);
+            deps.emit({ type: "service.completed", nodeId: node.id, payload: result as Json });
+            instance.currentNodeId = serviceNext(def, node);
+            break;
           } catch (err) {
             const message = (err as Error).message;
             deps.emit({ type: "service.failed", nodeId: node.id, payload: { error: message } });
-            // Error routing: if the task has an error edge, stash the error and
-            // continue down it instead of failing the whole instance.
+            // Error routing: continue down the error edge instead of failing.
             if (node.onErrorEdgeId) {
               instance.context.error = { node: node.id, message };
               const edge = edgeById(def, node.onErrorEdgeId);
@@ -267,22 +314,6 @@ export async function advance(
             deps.emit({ type: "instance.failed", nodeId: node.id, payload: { error: message } });
             return { status: "failed", error: message };
           }
-          // Async connector: it kicked off external work and will call back.
-          // Park until resumeCallback() arrives with the real result.
-          if (result && (result as Record<string, Json>).__awaitCallback) {
-            instance.status = "waiting";
-            const token = String((result as Record<string, Json>).__callbackToken ?? "");
-            deps.emit({ type: "service.pending", nodeId: node.id, payload: { token } });
-            return { status: "awaiting", node, token };
-          }
-          applyOutputMap(instance.context, result, node.outputMap);
-          deps.emit({
-            type: "service.completed",
-            nodeId: node.id,
-            payload: result as Json,
-          });
-          instance.currentNodeId = serviceNext(def, node);
-          break;
         }
         case "gateway": {
           let chosen = node.defaultEdgeId;
@@ -306,6 +337,29 @@ export async function advance(
           instance.status = "waiting";
           deps.emit({ type: "timer.scheduled", nodeId: node.id });
           return { status: "sleeping", timer: node };
+        }
+        case "subprocess": {
+          if (!deps.runSubprocess) {
+            instance.status = "failed"; instance.error = "subprocess execution not available";
+            return { status: "failed", error: "subprocess execution not available" };
+          }
+          const input = applyInputMap(instance.context, node.inputMap);
+          try {
+            if (node.multiInstance) {
+              await runMulti(node.multiInstance, instance.context, input, (itemInput) => deps.runSubprocess!(node.processId, itemInput));
+            } else {
+              const result = await deps.runSubprocess(node.processId, input);
+              applyOutputMap(instance.context, result, node.outputMap);
+            }
+            deps.emit({ type: "subprocess.completed", nodeId: node.id, payload: { processId: node.processId } });
+            instance.currentNodeId = singleNext(def, node.id);
+            break;
+          } catch (err) {
+            const message = (err as Error).message;
+            instance.status = "failed"; instance.error = message;
+            deps.emit({ type: "instance.failed", nodeId: node.id, payload: { error: message } });
+            return { status: "failed", error: message };
+          }
         }
         case "end": {
           instance.status = "completed";
