@@ -11,6 +11,9 @@ export function Settings() {
   const [msg, setMsg] = useState("");
   const [testInput, setTestInput] = useState('{ "income": 1200 }');
   const [testOut, setTestOut] = useState("");
+  const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string }[]>([]);
+  const [audit, setAudit] = useState<{ ts: string; actor: string; action: string; target: string | null }[]>([]);
+  const [nu, setNu] = useState({ username: "", password: "", displayName: "", role: "operator" });
 
   async function reload() {
     const r = await api("/connectors");
@@ -18,7 +21,17 @@ export function Settings() {
     const d = (r.data as Connector[]).find((c) => c.id === "describer");
     if (d) setDescriber(d);
   }
-  useEffect(() => { reload(); }, []);
+  async function loadAdmin() {
+    const u = await api("/auth/users"); if (u.ok) setUsers(u.data);
+    const a = await api("/audit"); if (a.ok) setAudit(a.data);
+  }
+  useEffect(() => { reload(); loadAdmin(); }, []);
+
+  async function addUser() {
+    const r = await api("/auth/users", { method: "POST", body: JSON.stringify(nu) });
+    if (r.ok) { setNu({ username: "", password: "", displayName: "", role: "operator" }); setMsg(`User ${r.data.user.username} created`); loadAdmin(); }
+    else setMsg(r.data?.error ?? "Could not create user");
+  }
 
   async function save(c: Connector, note: string) {
     await api("/connectors", { method: "POST", body: JSON.stringify(c) });
@@ -46,8 +59,38 @@ export function Settings() {
 
   return (
     <div style={{ maxWidth: 900 }}>
-      {/* ---- LLM keys ---- */}
+      {/* ---- Users & access ---- */}
       <section style={S.card}>
+        <h2 style={S.h2}>Users &amp; access</h2>
+        <p style={S.hint}>Roles are hierarchical: <b>viewer</b> → <b>operator</b> (run/inbox) → <b>analyst</b> (build) → <b>admin</b> (settings/users).</p>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
+          <thead><tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
+            <th style={S.th}>User</th><th style={S.th}>Username</th><th style={S.th}>Role</th>
+          </tr></thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={S.td}>{u.displayName}</td><td style={S.td}><code>{u.username}</code></td>
+                <td style={S.td}><span style={S.rolePill}>{u.role}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+          <div style={{ flex: "1 1 130px" }}><L>Username</L><input style={S.input} value={nu.username} onChange={(e) => setNu({ ...nu, username: e.target.value })} /></div>
+          <div style={{ flex: "1 1 130px" }}><L>Display name</L><input style={S.input} value={nu.displayName} onChange={(e) => setNu({ ...nu, displayName: e.target.value })} /></div>
+          <div style={{ flex: "1 1 120px" }}><L>Password</L><input style={S.input} type="password" value={nu.password} onChange={(e) => setNu({ ...nu, password: e.target.value })} /></div>
+          <div style={{ flex: "1 1 110px" }}><L>Role</L>
+            <select style={S.input} value={nu.role} onChange={(e) => setNu({ ...nu, role: e.target.value })}>
+              {["viewer", "operator", "analyst", "admin"].map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <button style={S.primary} onClick={addUser}>Add user</button>
+        </div>
+      </section>
+
+      {/* ---- LLM keys ---- */}
+      <section style={{ ...S.card, marginTop: 18 }}>
         <h2 style={S.h2}>Process description model (LLM)</h2>
         <p style={S.hint}>The LLM used by <b>✦ Describe</b>. Defaults to Claude Haiku via Anthropic's OpenAI-compatible endpoint; any OpenAI-compatible provider works.</p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
@@ -122,6 +165,28 @@ export function Settings() {
         </div>
       </section>
 
+      {/* ---- Audit log ---- */}
+      <section style={{ ...S.card, marginTop: 18 }}>
+        <h2 style={S.h2}>Recent activity</h2>
+        <p style={S.hint}>Who did what, most recent first.</p>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, marginTop: 8 }}>
+          <thead><tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
+            <th style={S.th}>When</th><th style={S.th}>Actor</th><th style={S.th}>Action</th><th style={S.th}>Target</th>
+          </tr></thead>
+          <tbody>
+            {audit.slice(0, 40).map((a, i) => (
+              <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={S.td}>{new Date(a.ts).toLocaleString()}</td>
+                <td style={S.td}><b>{a.actor}</b></td>
+                <td style={S.td}><code>{a.action}</code></td>
+                <td style={S.td}>{a.target ?? "—"}</td>
+              </tr>
+            ))}
+            {audit.length === 0 && <tr><td style={S.td} colSpan={4}>No activity yet.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+
       {msg && <div style={S.ok}>{msg}</div>}
     </div>
   );
@@ -142,4 +207,7 @@ const S: Record<string, React.CSSProperties> = {
   ghost: { background: "white", color: "var(--primary)", border: "1px solid var(--primary)", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" },
   pre: { background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: 12, overflowX: "auto", marginTop: 8 },
   ok: { marginTop: 14, background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13 },
+  th: { padding: "7px 10px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 },
+  td: { padding: "7px 10px", color: "var(--text)", verticalAlign: "top" },
+  rolePill: { fontSize: 11, background: "var(--primary-tint)", color: "var(--primary-strong)", borderRadius: 6, padding: "2px 8px", fontWeight: 700 },
 };

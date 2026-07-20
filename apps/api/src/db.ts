@@ -13,6 +13,7 @@ import type {
   ProcessInstance,
 } from "@cassiopeia/model";
 import type { EngineEvent } from "@cassiopeia/engine";
+import { decryptValue, encryptValue, isSecretField } from "./secrets.js";
 
 export interface ConnectorRow {
   id: string;
@@ -100,6 +101,27 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       node_id TEXT NOT NULL,
       wake_at TEXT NOT NULL,
       status TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      ts TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target TEXT
     );
   `);
   migrate();
@@ -244,27 +266,69 @@ export function listForms(): { id: string; title: string }[] {
 
 // ---- connectors ----
 
+function decryptConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(config)) {
+    out[k] = isSecretField(k) && typeof v === "string" ? decryptValue(v) : v;
+  }
+  return out;
+}
+
+/** Replace secret fields with a masked marker for API responses. */
+function maskConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(config)) {
+    out[k] = isSecretField(k) ? (v ? "" : "") : v; // never leak secrets to clients
+  }
+  return out;
+}
+
+/** For the UI: connectors with secrets masked. */
 export function listConnectors(): ConnectorRow[] {
   const rows = db.prepare(`SELECT * FROM connectors`).all() as {
     id: string;
     type: string;
     config_json: string;
   }[];
-  return rows.map((r) => ({ id: r.id, type: r.type, config: JSON.parse(r.config_json) }));
+  return rows.map((r) => ({ id: r.id, type: r.type, config: maskConfig(JSON.parse(r.config_json)) }));
 }
 
+/**
+ * Persist a connector, encrypting secret fields. Secrets sent empty/blank are
+ * treated as "unchanged" so the client never has to echo a key back to save
+ * other fields.
+ */
 export function saveConnector(c: ConnectorRow): void {
+  const incoming = c.config ?? {};
+  const row = db.prepare(`SELECT config_json FROM connectors WHERE id = ?`).get(c.id) as
+    | { config_json: string }
+    | undefined;
+  const existing: Record<string, unknown> = row ? JSON.parse(row.config_json) : {};
+
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(incoming)) {
+    if (isSecretField(k)) {
+      const s = typeof v === "string" ? v : "";
+      if (s === "") { if (existing[k] != null) out[k] = existing[k]; } // keep stored (encrypted)
+      else out[k] = encryptValue(s);
+    } else out[k] = v;
+  }
+  // preserve stored secrets the client didn't send at all
+  for (const [k, v] of Object.entries(existing)) {
+    if (isSecretField(k) && !(k in incoming)) out[k] = v;
+  }
   db.prepare(
     `INSERT OR REPLACE INTO connectors (id, type, config_json) VALUES (?, ?, ?)`,
-  ).run(c.id, c.type, JSON.stringify(c.config));
+  ).run(c.id, c.type, JSON.stringify(out));
 }
 
+/** For execution: connector with secrets decrypted. Server-side only. */
 export function getConnector(id: string): ConnectorRow {
   const row = db.prepare(`SELECT * FROM connectors WHERE id = ?`).get(id) as
     | { id: string; type: string; config_json: string }
     | undefined;
   if (!row) throw new Error(`Connector not found: ${id}`);
-  return { id: row.id, type: row.type, config: JSON.parse(row.config_json) };
+  return { id: row.id, type: row.type, config: decryptConfig(JSON.parse(row.config_json)) };
 }
 
 // ---- instances ----
@@ -465,6 +529,96 @@ export function eventDailyCounts(): { day: string; type: string; n: number }[] {
        GROUP BY day, type`,
     )
     .all() as { day: string; type: string; n: number }[];
+}
+
+// ---- users & sessions (M11 auth) ----
+
+export type Role = "admin" | "analyst" | "operator" | "viewer";
+
+export interface UserRow {
+  id: string;
+  username: string;
+  displayName: string;
+  role: Role;
+  passwordHash: string;
+  passwordSalt: string;
+  createdAt: string;
+}
+
+export type PublicUser = Pick<UserRow, "id" | "username" | "displayName" | "role">;
+
+export function toPublicUser(u: UserRow): PublicUser {
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role };
+}
+
+export function createUser(u: Omit<UserRow, "id" | "createdAt"> & { id?: string }): UserRow {
+  const row: UserRow = { id: u.id ?? randomUUID(), createdAt: new Date().toISOString(), ...u };
+  db.prepare(
+    `INSERT INTO users (id, username, display_name, role, password_hash, password_salt, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(row.id, row.username, row.displayName, row.role, row.passwordHash, row.passwordSalt, row.createdAt);
+  return row;
+}
+
+function rowToUser(r: Record<string, unknown>): UserRow {
+  return {
+    id: r.id as string,
+    username: r.username as string,
+    displayName: r.display_name as string,
+    role: r.role as Role,
+    passwordHash: r.password_hash as string,
+    passwordSalt: r.password_salt as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function getUserByUsername(username: string): UserRow | undefined {
+  const r = db.prepare(`SELECT * FROM users WHERE username = ?`).get(username) as Record<string, unknown> | undefined;
+  return r ? rowToUser(r) : undefined;
+}
+
+export function getUserById(id: string): UserRow | undefined {
+  const r = db.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as Record<string, unknown> | undefined;
+  return r ? rowToUser(r) : undefined;
+}
+
+export function listUsers(): PublicUser[] {
+  const rows = db.prepare(`SELECT * FROM users ORDER BY created_at ASC`).all() as Record<string, unknown>[];
+  return rows.map((r) => toPublicUser(rowToUser(r)));
+}
+
+export function countUsers(): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as { n: number }).n;
+}
+
+export function createSession(userId: string, token: string, expiresAt: string): void {
+  db.prepare(`INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`).run(token, userId, expiresAt);
+}
+
+/** Resolve a session token to its user, honoring expiry. */
+export function getSessionUser(token: string): UserRow | undefined {
+  const s = db.prepare(`SELECT * FROM sessions WHERE token = ?`).get(token) as
+    | { user_id: string; expires_at: string }
+    | undefined;
+  if (!s) return undefined;
+  if (new Date(s.expires_at).getTime() < Date.now()) { deleteSession(token); return undefined; }
+  return getUserById(s.user_id);
+}
+
+export function deleteSession(token: string): void {
+  db.prepare(`DELETE FROM sessions WHERE token = ?`).run(token);
+}
+
+// ---- audit log (who did what) ----
+
+export function addAudit(actor: string, action: string, target?: string): void {
+  db.prepare(`INSERT INTO audit_log (id, ts, actor, action, target) VALUES (?, ?, ?, ?, ?)`)
+    .run(randomUUID(), new Date().toISOString(), actor, action, target ?? null);
+}
+
+export function listAudit(limit = 200): { ts: string; actor: string; action: string; target: string | null }[] {
+  return db.prepare(`SELECT ts, actor, action, target FROM audit_log ORDER BY ts DESC LIMIT ?`).all(limit) as
+    { ts: string; actor: string; action: string; target: string | null }[];
 }
 
 export function listEvents(instanceId: string): StoredEvent[] {

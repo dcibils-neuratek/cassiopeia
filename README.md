@@ -38,7 +38,12 @@ pnpm install
 pnpm start       # starts API (:3001) + web (:5173) together — open http://localhost:5173
 ```
 
-Then open **http://localhost:5173** and start in the **Build** tab. Ctrl-C stops both.
+Then open **http://localhost:5173**. Sign in with the seeded **admin / admin**
+(change it in production). Ctrl-C stops both.
+
+> **Security note:** connector secrets are encrypted at rest with a key from
+> `CASSIOPEIA_SECRET_KEY` (auto-generated into `data/secret.key` in dev). Set that
+> env var in production and keep it stable.
 
 Other commands:
 

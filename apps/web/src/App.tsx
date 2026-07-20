@@ -7,10 +7,20 @@ import { Home } from "./Home.js";
 import { Stats } from "./Stats.js";
 import { Settings } from "./Settings.js";
 import { Inbox } from "./Inbox.js";
-import { api } from "./api.js";
+import { Login, type CurrentUser } from "./Login.js";
+import { api, getToken, setToken } from "./api.js";
 
 type Mode = "home" | "stats" | "templates" | "build" | "run" | "inbox" | "monitor" | "settings";
 type DefSummary = { id: string; name: string };
+
+const ROLE_RANK: Record<string, number> = { viewer: 0, operator: 1, analyst: 2, admin: 3 };
+const MODE_MIN: Record<Mode, string> = {
+  home: "viewer", stats: "viewer", monitor: "viewer",
+  run: "operator", inbox: "operator",
+  templates: "analyst", build: "analyst",
+  settings: "admin",
+};
+const canSee = (role: string, mode: Mode) => (ROLE_RANK[role] ?? 0) >= ROLE_RANK[MODE_MIN[mode]];
 
 const HINTS: Record<Mode, string> = {
   home: "Your workflows at a glance",
@@ -36,17 +46,44 @@ export function App() {
   const [mode, setMode] = useState<Mode>("home");
   const [defId, setDefId] = useState("onboarding");
   const [defs, setDefs] = useState<DefSummary[]>([]);
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  // Resolve the current session on load; react to forced logout (401).
+  useEffect(() => {
+    (async () => {
+      if (getToken()) {
+        const r = await api("/auth/me");
+        if (r.ok) setUser(r.data);
+      }
+      setAuthReady(true);
+    })();
+    const onUnauth = () => setUser(null);
+    window.addEventListener("cass-unauth", onUnauth);
+    return () => window.removeEventListener("cass-unauth", onUnauth);
+  }, []);
 
   async function refreshDefs() {
     const r = await api("/definitions");
-    setDefs(r.data.map((d: any) => ({ id: d.id, name: d.name })));
+    if (r.ok) setDefs(r.data.map((d: any) => ({ id: d.id, name: d.name })));
   }
-  useEffect(() => { refreshDefs(); }, []);
-  useEffect(() => { if (mode === "build" || mode === "run") refreshDefs(); }, [mode]);
+  useEffect(() => { if (user) refreshDefs(); }, [user]);
+  useEffect(() => { if (user && (mode === "build" || mode === "run")) refreshDefs(); }, [mode]);
+  // Keep the active view within the user's role.
+  useEffect(() => { if (user && !canSee(user.role, mode)) setMode("home"); }, [user, mode]);
+
+  async function logout() {
+    await api("/auth/logout", { method: "POST" });
+    setToken(null); setUser(null);
+  }
 
   async function useTemplate(id: string) { setDefId(id); await refreshDefs(); setMode("build"); }
   function openWorkflow(id: string, m: "build" | "run") { setDefId(id); setMode(m); }
 
+  if (!authReady) return null;
+  if (!user) return <Login onLogin={setUser} />;
+
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((m) => canSee(user.role, m)) })).filter((g) => g.items.length);
   const showPicker = mode === "build" || mode === "run";
 
   return (
@@ -63,7 +100,7 @@ export function App() {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {GROUPS.map((g) => (
+          {groups.map((g) => (
             <div key={g.label} style={{ marginBottom: 14 }}>
               <div className="eyebrow" style={{ padding: "0 20px", marginBottom: 6 }}>{g.label}</div>
               <nav style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: 2 }}>
@@ -78,10 +115,21 @@ export function App() {
         </div>
 
         <nav style={{ padding: "8px 12px 0", borderTop: "1px solid var(--border)" }}>
-          <button className={mode === "settings" ? undefined : "nav-item"} onClick={() => setMode("settings")} style={navItem(mode === "settings")}>
-            <span style={chip(mode === "settings")}><Icon name="settings" /></span>Settings
-          </button>
+          {canSee(user.role, "settings") && (
+            <button className={mode === "settings" ? undefined : "nav-item"} onClick={() => setMode("settings")} style={navItem(mode === "settings")}>
+              <span style={chip(mode === "settings")}><Icon name="settings" /></span>Settings
+            </button>
+          )}
         </nav>
+
+        <div style={S.userRow}>
+          <div style={S.avatar}>{(user.displayName || user.username).slice(0, 1).toUpperCase()}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.displayName || user.username}</div>
+            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{user.role}</div>
+          </div>
+          <button onClick={logout} title="Sign out" style={S.logoutBtn}>⎋</button>
+        </div>
         <div style={S.poweredBy}>POWERED BY <b style={{ color: "var(--text-muted)" }}>Neuratek</b></div>
       </aside>
 
@@ -108,7 +156,7 @@ export function App() {
           {mode === "templates" && <Templates onUse={useTemplate} />}
           {mode === "build" && <Designer key={defId} defId={defId} />}
           {mode === "run" && <Portal key={defId} defId={defId} />}
-          {mode === "inbox" && <Inbox />}
+          {mode === "inbox" && <Inbox me={user.username} />}
           {mode === "monitor" && <Monitor />}
           {mode === "settings" && <Settings />}
         </div>
@@ -157,6 +205,9 @@ const S: Record<string, React.CSSProperties> = {
   brand: { padding: "0 22px 22px" },
   logoMark: { width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 16, background: "linear-gradient(135deg, #3b82f6, #1e40af)", boxShadow: "0 4px 10px -2px rgba(37,99,235,0.5)", flexShrink: 0 },
   poweredBy: { padding: "12px 22px 0", fontSize: 10, letterSpacing: 0.6, color: "var(--text-faint)", fontWeight: 700 },
+  userRow: { display: "flex", alignItems: "center", gap: 10, margin: "12px 14px 0", padding: "8px 10px", background: "var(--surface-3)", borderRadius: 10 },
+  avatar: { width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#3b82f6,#1e40af)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 },
+  logoutBtn: { background: "transparent", border: "1px solid var(--border-strong)", borderRadius: 8, width: 28, height: 28, cursor: "pointer", color: "var(--text-muted)", fontSize: 14, flexShrink: 0 },
   main: { flex: 1, minWidth: 0, padding: "22px 32px 40px" },
   topbar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, paddingBottom: 18, borderBottom: "1px solid var(--border)" },
   select: { border: "1px solid var(--border-strong)", borderRadius: 8, padding: "7px 10px", fontSize: 13, color: "var(--text)", background: "var(--surface)", fontWeight: 600 },

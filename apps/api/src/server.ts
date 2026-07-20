@@ -14,13 +14,17 @@ import {
   getTask,
   initDb,
   listDefinitionVersions,
+  addAudit,
   claimTask,
+  listAudit,
   listConnectors,
   listDefinitions,
   listEvents,
   listForms,
   listInstances,
   listOpenTasks,
+  listUsers,
+  type UserRow,
   maxPublishedVersion,
   openTaskForInstance,
   openTimerForInstance,
@@ -36,13 +40,90 @@ import { runConnector, listMcpTools } from "./connectors.js";
 import { startInstance, submitTask, retryInstance, startScheduler } from "./runtime.js";
 import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBundle } from "./governance.js";
 import { computeAnalytics, analyzeProcess } from "./analytics.js";
+import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
 
 initDb();
 seedSample();
+seedAuth(); // default admin/admin on first run
 startScheduler(); // resume timer nodes whose wake time has passed
+
+// ---- M11 auth: authenticate every non-public request ----
+function isPublic(method: string, url: string): boolean {
+  if (url === "/health") return true;
+  if (method === "POST" && url === "/auth/login") return true;
+  if (url.startsWith("/mock-")) return true; // called server-to-server by connectors
+  return false;
+}
+
+app.addHook("onRequest", async (req, reply) => {
+  const url = (req.raw.url ?? "").split("?")[0];
+  if (isPublic(req.method, url)) return;
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
+  const user = userForToken(token);
+  if (!user) return reply.code(401).send({ ok: false, error: "Authentication required" });
+  (req as unknown as { cassUser: UserRow }).cassUser = user;
+});
+
+/** The authenticated user for a request (present on all non-public routes). */
+function actor(req: unknown): UserRow {
+  return (req as { cassUser: UserRow }).cassUser;
+}
+
+/** Enforce a capability; returns the user or null after sending 403. */
+function requireCap(req: unknown, reply: import("fastify").FastifyReply, cap: Capability): UserRow | null {
+  const user = actor(req);
+  if (!can(user.role, cap)) { reply.code(403).send({ ok: false, error: `Requires '${cap}' permission (your role: ${user.role})` }); return null; }
+  return user;
+}
+
+// ---- auth endpoints ----
+app.post("/auth/login", async (req, reply) => {
+  const { username, password } = (req.body ?? {}) as { username?: string; password?: string };
+  const result = login(username ?? "", password ?? "");
+  if (!result) return reply.code(401).send({ ok: false, error: "Invalid username or password" });
+  addAudit(result.user.username, "login");
+  return { ok: true, ...result };
+});
+
+app.post("/auth/logout", async (req) => {
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
+  if (token) logout(token);
+  return { ok: true };
+});
+
+app.get("/auth/me", async (req) => {
+  const u = actor(req);
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role };
+});
+
+app.get("/auth/users", async (req, reply) => {
+  if (!requireCap(req, reply, "admin")) return;
+  return listUsers();
+});
+
+app.post("/auth/users", async (req, reply) => {
+  const admin = requireCap(req, reply, "admin");
+  if (!admin) return;
+  const b = (req.body ?? {}) as { username?: string; password?: string; displayName?: string; role?: string };
+  if (!ALL_ROLES.includes(b.role as never)) return reply.code(400).send({ ok: false, error: "Invalid role" });
+  try {
+    const u = registerUser(b.username ?? "", b.password ?? "", b.displayName ?? "", b.role as never);
+    addAudit(admin.username, "user.create", u.username);
+    return { ok: true, user: u };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.get("/audit", async (req, reply) => {
+  if (!requireCap(req, reply, "admin")) return;
+  return listAudit();
+});
 
 app.get("/health", async () => ({ ok: true }));
 
@@ -98,6 +179,7 @@ app.get("/analytics/:defId", async (req, reply) => {
 
 // AI process analyst: interpret the run metrics and suggest improvements.
 app.post("/definitions/:id/analyze", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   const override = (req.body ?? {}) as { baseUrl?: string; apiKey?: string; model?: string };
   try {
@@ -111,8 +193,10 @@ app.post("/definitions/:id/analyze", async (req, reply) => {
 app.get("/templates", async () => listTemplates());
 
 app.post("/templates/:id/install", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   try {
+    addAudit(actor(req).username, "template.install", id);
     return { ok: true, defId: installTemplate(id) };
   } catch (err) {
     return reply.code(404).send({ ok: false, error: (err as Error).message });
@@ -129,6 +213,7 @@ app.get("/definitions/:id", async (req) => {
 // LLM-generated functional description of a process. Optional {baseUrl, apiKey,
 // model} in the body override the seeded `describer` connector for this call.
 app.post("/definitions/:id/describe", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   const override = (req.body ?? {}) as { baseUrl?: string; apiKey?: string; model?: string };
   try {
@@ -143,6 +228,7 @@ app.post("/definitions/:id/describe", async (req, reply) => {
 // canvas can load it. Body: { instruction, current?, baseUrl?, apiKey?, model? }.
 app.post("/definitions/:id/ai-build", async (req, reply) => {
   const { id } = req.params as { id: string };
+  if (!requireCap(req, reply, "build")) return;
   const b = (req.body ?? {}) as { instruction?: string; current?: ProcessDefinition; baseUrl?: string; apiKey?: string; model?: string };
   if (!b.instruction) return reply.code(400).send({ ok: false, error: "instruction is required" });
   try {
@@ -167,7 +253,8 @@ app.get("/definitions/:id/edit", async (req, reply) => {
 });
 
 // Save the working draft (version 0).
-app.post("/definitions/:id/draft", async (req) => {
+app.post("/definitions/:id/draft", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   const body = req.body as ProcessDefinition;
   const draft: ProcessDefinition = { ...body, id, version: 0, status: "draft" };
@@ -177,6 +264,7 @@ app.post("/definitions/:id/draft", async (req) => {
 
 // Publish: refuse if invalid; otherwise store as the next published version.
 app.post("/definitions/:id/publish", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   const body = req.body as ProcessDefinition;
   const candidate: ProcessDefinition = { ...body, id, status: "published" };
@@ -186,6 +274,7 @@ app.post("/definitions/:id/publish", async (req, reply) => {
   saveDefinition(candidate);
   // keep editing the draft in sync with what was published
   saveDefinition({ ...candidate, version: 0, status: "draft" });
+  addAudit(actor(req).username, "publish", `${id}@v${candidate.version}`);
   return { ok: true, version: candidate.version };
 });
 
@@ -198,10 +287,12 @@ app.get("/definitions/:id/versions", async (req) => {
 
 // Restore a published version back into the editable draft.
 app.post("/definitions/:id/restore/:version", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id, version } = req.params as { id: string; version: string };
   try {
     const def = getDefinition(id, Number(version));
     saveDefinition({ ...def, id, version: 0, status: "draft" });
+    addAudit(actor(req).username, "restore", `${id}@v${version}`);
     return { ok: true };
   } catch (err) {
     return reply.code(404).send({ ok: false, error: (err as Error).message });
@@ -220,9 +311,11 @@ app.get("/definitions/:id/export", async (req, reply) => {
 
 // Import a bundle (as a new draft). Body: the bundle, optional { targetId }.
 app.post("/definitions/import", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const body = (req.body ?? {}) as WorkflowBundle & { targetId?: string };
   try {
     const defId = importBundle(body, body.targetId);
+    addAudit(actor(req).username, "import", defId);
     return { ok: true, defId };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
@@ -244,6 +337,7 @@ app.get("/connectors", async () => listConnectors());
 
 // Discover the tools a given MCP server exposes (for the tool-name picker).
 app.post("/mcp/tools", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { url, apiKey } = (req.body ?? {}) as { url?: string; apiKey?: string };
   try {
     return { ok: true, tools: await listMcpTools(url ?? "", apiKey) };
@@ -252,14 +346,17 @@ app.post("/mcp/tools", async (req, reply) => {
   }
 });
 
-app.post("/connectors", async (req) => {
+app.post("/connectors", async (req, reply) => {
+  if (!requireCap(req, reply, "admin")) return;
   const body = req.body as { id: string; type: string; config: Record<string, unknown> };
   saveConnector({ id: body.id, type: body.type, config: body.config ?? {} });
+  addAudit(actor(req).username, "connector.save", body.id);
   return { ok: true };
 });
 
 // Test a connector with sample input (used by the admin "Test" button).
 app.post("/connectors/:id/test", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   const input = (req.body ?? {}) as Record<string, never>;
   try {
@@ -398,15 +495,19 @@ app.get("/instances/:id/audit.csv", async (req, reply) => {
   return auditCsv(id);
 });
 
-app.post("/definitions/:id/start", async (req) => {
+app.post("/definitions/:id/start", async (req, reply) => {
+  if (!requireCap(req, reply, "operate")) return;
   const { id } = req.params as { id: string };
+  addAudit(actor(req).username, "instance.start", id);
   return startInstance(id);
 });
 
 // Re-run a failed instance from where it stopped (e.g. after a flaky dependency recovers).
 app.post("/instances/:id/retry", async (req, reply) => {
+  if (!requireCap(req, reply, "operate")) return;
   const { id } = req.params as { id: string };
   try {
+    addAudit(actor(req).username, "instance.retry", id);
     const result = await retryInstance(id);
     return { ok: true, result, instance: getInstance(id) };
   } catch (err) {
@@ -440,22 +541,27 @@ app.get("/tasks", async () => {
     });
 });
 
-// Claim an open task for a user (assign it to them).
+// Claim an open task. Assigns to the current user; an admin may claim for someone else.
 app.post("/tasks/:taskId/claim", async (req, reply) => {
+  if (!requireCap(req, reply, "operate")) return;
   const { taskId } = req.params as { taskId: string };
-  const { assignee } = (req.body ?? {}) as { assignee?: string };
-  if (!assignee) return reply.code(400).send({ ok: false, error: "assignee is required" });
+  const user = actor(req);
+  const body = (req.body ?? {}) as { assignee?: string };
+  const assignee = can(user.role, "admin") && body.assignee ? body.assignee : user.username;
   try {
     claimTask(taskId, assignee);
-    return { ok: true };
+    addAudit(user.username, "task.claim", taskId);
+    return { ok: true, assignee };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
   }
 });
 
-app.post("/tasks/:taskId/submit", async (req) => {
+app.post("/tasks/:taskId/submit", async (req, reply) => {
+  if (!requireCap(req, reply, "operate")) return;
   const { taskId } = req.params as { taskId: string };
   const body = (req.body ?? {}) as Record<string, unknown>;
+  addAudit(actor(req).username, "task.submit", taskId);
   const result = await submitTask(taskId, body as Record<string, never>);
   const task = getTask(taskId);
   return { result, instance: getInstance(task.instanceId) };

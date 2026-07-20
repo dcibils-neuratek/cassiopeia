@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "./api.js";
+import { api, apiRaw } from "./api.js";
 
 type Instance = { id: string; defId: string; status: string; currentNodeId: string; context: Record<string, unknown>; error?: string };
 type Event = { type: string; nodeId?: string; payload?: unknown; ts: string };
@@ -24,6 +24,14 @@ export function Monitor() {
     openId.current = id;
     const r = await api(`/instances/${id}`);
     setDetail({ instance: r.data.instance, events: r.data.events, openTask: r.data.openTask, openTimer: r.data.openTimer });
+  }
+  async function downloadCsv(id: string) {
+    const res = await apiRaw(`/instances/${id}/audit.csv`);
+    const text = await res.text();
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `audit-${id.slice(0, 8)}.csv`; a.click();
+    URL.revokeObjectURL(url);
   }
   async function retry(id: string) {
     setRetrying(true);
@@ -117,7 +125,7 @@ export function Monitor() {
             <pre style={S.pre}>{JSON.stringify(detail.instance.context, null, 2)}</pre>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
               <div style={S.head}>Audit trail</div>
-              <a href={`/api/instances/${detail.instance.id}/audit.csv`} style={S.csvLink}>⬇ CSV</a>
+              <button onClick={() => downloadCsv(detail.instance.id)} style={S.csvLink}>⬇ CSV</button>
             </div>
             <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
               {detail.events.map((e, i) => (
@@ -145,5 +153,5 @@ const S: Record<string, React.CSSProperties> = {
   timerBox: { background: "#ecfeff", border: "1px solid #a5f3fc", color: "#155e75", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
   dueBox: { background: "#f0f9ff", border: "1px solid #bae6fd", color: "#075985", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
   overdueBox: { background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", borderRadius: 8, padding: "8px 10px", fontSize: 12, margin: "6px 0", fontWeight: 600 },
-  csvLink: { fontSize: 11, color: "var(--primary)", textDecoration: "none", fontWeight: 700 },
+  csvLink: { fontSize: 11, color: "var(--primary)", background: "transparent", border: 0, cursor: "pointer", fontWeight: 700 },
 };

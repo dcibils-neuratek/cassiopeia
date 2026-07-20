@@ -59,7 +59,7 @@ delivery hardening. Sequenced so each unblocks the next.
 Chosen starting track: **M11 (identity & security)** — prerequisite for any real
 pilot.
 
-### M11 — Identity, roles & secrets  ← next
+### M11 — Identity, roles & secrets ✅
 Give the platform real users and stop trusting the client.
 - **Auth**: local users (scrypt password hashing, `node:crypto`), login → session
   token; middleware authenticates every non-public request. OIDC-ready shape.

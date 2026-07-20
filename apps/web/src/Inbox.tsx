@@ -12,11 +12,10 @@ type Task = {
 
 const PRIO_COLOR: Record<string, string> = { high: "#dc2626", normal: "#2563eb", low: "#64748b" };
 
-export function Inbox() {
+export function Inbox({ me }: { me: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [defs, setDefs] = useState<{ id: string; name: string }[]>([]);
   const [filter, setFilter] = useState("all");
-  const [me, setMe] = useState(() => localStorage.getItem("cass.me") || "me");
   const [mineOnly, setMineOnly] = useState(false);
   const [sel, setSel] = useState<Task | null>(null);
   const [form, setForm] = useState<FormDefinition | null>(null);
@@ -36,7 +35,6 @@ export function Inbox() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  useEffect(() => { localStorage.setItem("cass.me", me); }, [me]);
   useEffect(() => {
     if (!sel?.formId) { setForm(null); return; }
     api(`/forms/${sel.formId}`).then((r) => setForm(r.data));
@@ -44,7 +42,7 @@ export function Inbox() {
 
   async function claim(t: Task) {
     setBusy(true);
-    try { await api(`/tasks/${t.id}/claim`, { method: "POST", body: JSON.stringify({ assignee: me }) }); await reload(); }
+    try { await api(`/tasks/${t.id}/claim`, { method: "POST" }); await reload(); }
     finally { setBusy(false); }
   }
   async function complete(patch: FormValues) {
@@ -73,9 +71,7 @@ export function Inbox() {
         <div style={S.bar}>
           <span style={S.head}>Worklist ({shown.length})</span>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <label style={S.youLabel}>You:
-              <input value={me} onChange={(e) => setMe(e.target.value)} style={S.youInput} />
-            </label>
+            <span style={S.youLabel}>You: <b style={{ color: "var(--text)" }}>{me}</b></span>
             <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 4, alignItems: "center" }}>
               <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} /> mine
             </label>

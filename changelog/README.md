@@ -4,6 +4,7 @@ One file per milestone, each describing what was added **functionally** (what a
 user can now do) and **technically** (how it was built), plus how it was
 verified. Newest first.
 
+- [M11 — Identity, roles & secrets](M11.md)
 - [M10 — Analytics & AI process analyst](M10.md)
 - [M9 — Governance: versioning, import/export, data dictionary](M9.md)
 - [M8 — Task Inbox & assignment](M8.md)
