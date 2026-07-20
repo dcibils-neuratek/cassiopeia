@@ -53,8 +53,13 @@ export function App() {
     <div style={S.shell}>
       <aside style={S.sidebar}>
         <div style={S.brand}>
-          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 0.3, color: "var(--primary)" }}>CASSIOPEIA</div>
-          <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>process &amp; form studio</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={S.logoMark}>✦</div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0.2, color: "var(--text)" }}>Cassiopeia</div>
+              <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 1, letterSpacing: 0.2 }}>process &amp; form studio</div>
+            </div>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto" }}>
@@ -63,7 +68,7 @@ export function App() {
               <div className="eyebrow" style={{ padding: "0 20px", marginBottom: 6 }}>{g.label}</div>
               <nav style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: 2 }}>
                 {g.items.map((id) => (
-                  <button key={id} onClick={() => setMode(id)} style={navItem(mode === id)}>
+                  <button key={id} className={mode === id ? undefined : "nav-item"} onClick={() => setMode(id)} style={navItem(mode === id)}>
                     <span style={chip(mode === id)}><Icon name={id} /></span>{TITLES[id]}
                   </button>
                 ))}
@@ -73,7 +78,7 @@ export function App() {
         </div>
 
         <nav style={{ padding: "8px 12px 0", borderTop: "1px solid var(--border)" }}>
-          <button onClick={() => setMode("settings")} style={navItem(mode === "settings")}>
+          <button className={mode === "settings" ? undefined : "nav-item"} onClick={() => setMode("settings")} style={navItem(mode === "settings")}>
             <span style={chip(mode === "settings")}><Icon name="settings" /></span>Settings
           </button>
         </nav>
@@ -97,7 +102,7 @@ export function App() {
           )}
         </div>
 
-        <div style={{ marginTop: 18 }}>
+        <div key={mode} className="fade-in" style={{ marginTop: 20 }}>
           {mode === "home" && <Home onOpen={openWorkflow} onTemplates={() => setMode("templates")} />}
           {mode === "stats" && <Stats />}
           {mode === "templates" && <Templates onUse={useTemplate} />}
@@ -148,10 +153,11 @@ function chip(active: boolean): React.CSSProperties {
 
 const S: Record<string, React.CSSProperties> = {
   shell: { display: "flex", minHeight: "100vh", alignItems: "stretch" },
-  sidebar: { width: 240, flexShrink: 0, background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", paddingTop: 20, paddingBottom: 16 },
-  brand: { padding: "0 20px 20px" },
-  poweredBy: { padding: "12px 20px 0", fontSize: 10, letterSpacing: 0.6, color: "var(--text-faint)", fontWeight: 700 },
-  main: { flex: 1, minWidth: 0, padding: "22px 28px" },
-  topbar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 },
-  select: { border: "1px solid var(--border)", borderRadius: 8, padding: "7px 10px", fontSize: 13, color: "var(--text)", background: "white", fontWeight: 600 },
+  sidebar: { width: 246, flexShrink: 0, background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", paddingTop: 22, paddingBottom: 16, position: "sticky", top: 0, height: "100vh" },
+  brand: { padding: "0 22px 22px" },
+  logoMark: { width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 16, background: "linear-gradient(135deg, #3b82f6, #1e40af)", boxShadow: "0 4px 10px -2px rgba(37,99,235,0.5)", flexShrink: 0 },
+  poweredBy: { padding: "12px 22px 0", fontSize: 10, letterSpacing: 0.6, color: "var(--text-faint)", fontWeight: 700 },
+  main: { flex: 1, minWidth: 0, padding: "22px 32px 40px" },
+  topbar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, paddingBottom: 18, borderBottom: "1px solid var(--border)" },
+  select: { border: "1px solid var(--border-strong)", borderRadius: 8, padding: "7px 10px", fontSize: 13, color: "var(--text)", background: "var(--surface)", fontWeight: 600 },
 };

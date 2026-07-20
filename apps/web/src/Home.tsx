@@ -32,7 +32,7 @@ export function Home({ onOpen, onTemplates }: { onOpen: (defId: string, mode: "b
 
       <div style={S.grid}>
         {stats?.perProcess.map((p) => (
-          <div key={p.id} style={S.card}>
+          <div key={p.id} className="hoverable" style={S.card}>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{p.name}</div>
             <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 12 }}>{p.id}</div>
             <div style={{ display: "flex", gap: 14, fontSize: 13, color: "var(--text-muted)" }}>
@@ -65,11 +65,11 @@ function Stat({ label, value, accent }: { label: string; value: number | string;
 
 const S: Record<string, React.CSSProperties> = {
   cards: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 },
-  statCard: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" },
-  h2: { fontSize: 16, fontWeight: 800, margin: 0 },
+  statCard: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "16px 18px", boxShadow: "var(--shadow)" },
+  h2: { fontSize: 17, fontWeight: 800, margin: 0 },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16, marginTop: 14 },
-  card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 18, boxShadow: "var(--shadow)" },
-  primary: { background: "var(--primary)", color: "white", border: 0, borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" },
-  run: { background: "#16a34a", color: "white", border: 0, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" },
-  ghost: { background: "white", color: "var(--primary)", border: "1px solid var(--primary)", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer" },
+  card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 18, boxShadow: "var(--shadow)" },
+  primary: { background: "var(--primary)", color: "white", border: 0, borderRadius: "var(--radius-sm)", padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  run: { background: "var(--success)", color: "white", border: 0, borderRadius: "var(--radius-sm)", padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  ghost: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
 };
