@@ -265,6 +265,24 @@ export function getEditableDefinition(id: string): ProcessDefinition | null {
   return row ? (JSON.parse(row.json) as ProcessDefinition) : null;
 }
 
+/** Delete a workflow and everything it owns (instances, tasks, events, timers,
+ *  callbacks, comments, triggers, schedules). Forms/connectors are shared, so
+ *  they are left in place. */
+export function deleteDefinition(id: string): void {
+  const insts = db.prepare(`SELECT id FROM instances WHERE def_id = ?`).all(id) as { id: string }[];
+  for (const { id: iid } of insts) {
+    db.prepare(`DELETE FROM tasks WHERE instance_id = ?`).run(iid);
+    db.prepare(`DELETE FROM events WHERE instance_id = ?`).run(iid);
+    db.prepare(`DELETE FROM timers WHERE instance_id = ?`).run(iid);
+    db.prepare(`DELETE FROM callbacks WHERE instance_id = ?`).run(iid);
+    db.prepare(`DELETE FROM comments WHERE instance_id = ?`).run(iid);
+  }
+  db.prepare(`DELETE FROM instances WHERE def_id = ?`).run(id);
+  db.prepare(`DELETE FROM triggers WHERE def_id = ?`).run(id);
+  db.prepare(`DELETE FROM schedules WHERE def_id = ?`).run(id);
+  db.prepare(`DELETE FROM process_definitions WHERE id = ?`).run(id);
+}
+
 export function getDefinition(id: string, version?: number): ProcessDefinition {
   const row = version
     ? db

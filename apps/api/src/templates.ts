@@ -246,7 +246,100 @@ const travel: Template = {
   },
 };
 
-export const TEMPLATES: Template[] = [onboarding, mortgage, credit, travel];
+// ---------- 5. Loan pre-approval (end-to-end, human-in-the-loop) ----------
+const loanApplicationForm: FormDefinition = {
+  id: "loan-application", version: 1, title: "Loan Application",
+  fields: [
+    { kind: "text", id: "f1", bind: "fullName", label: "Full name", required: true },
+    { kind: "email", id: "f2", bind: "email", label: "Email", required: true },
+    { kind: "number", id: "f3", bind: "annualIncome", label: "Annual income (USD)", required: true, min: 0 },
+    { kind: "number", id: "f4", bind: "amount", label: "Loan amount requested (USD)", required: true, min: 1000 },
+    { kind: "number", id: "f5", bind: "termYears", label: "Term (years)", required: true, defaultValue: 5, min: 1, max: 30 },
+    { kind: "select", id: "f6", bind: "employmentStatus", label: "Employment status", required: true, options: [
+      { label: "Employed", value: "employed" }, { label: "Self-employed", value: "self" }, { label: "Unemployed", value: "unemployed" }] },
+  ],
+};
+const loanSignForm: FormDefinition = {
+  id: "loan-sign-offer", version: 1, title: "Your Offer",
+  fields: [
+    { kind: "computed", id: "g1", bind: "monthlyPaymentDisplay", label: "Estimated monthly payment (USD)", expr: "monthlyPayment" },
+    { kind: "computed", id: "g2", bind: "creditScoreDisplay", label: "Your credit score", expr: "creditScore" },
+    { kind: "checkbox", id: "g3", bind: "accepted", label: "I accept the offer terms", required: true },
+  ],
+};
+const loanUnderwriterForm: FormDefinition = {
+  id: "loan-underwriter", version: 1, title: "Underwriter Review",
+  fields: [
+    { kind: "computed", id: "h0", bind: "scoreShown", label: "Applicant credit score", expr: "creditScore" },
+    { kind: "select", id: "h1", bind: "reviewDecision", label: "Decision", required: true, options: [
+      { label: "Approve", value: "approve" }, { label: "Reject", value: "reject" }] },
+    { kind: "text", id: "h2", bind: "notes", label: "Notes" },
+  ],
+};
+const loanDef: ProcessDefinition = {
+  id: "loan-preapproval", name: "Loan Pre-Approval", version: 0, status: "draft", startNodeId: "s",
+  nodes: [
+    { id: "s", type: "start" },
+    { id: "apply", type: "userTask", name: "Loan Application", formId: "loan-application" },
+    { id: "credit", type: "serviceTask", name: "Credit Check", connectorId: "mock-credit-score", inputMap: { annualIncome: "annualIncome", amount: "amount" }, retries: 1, retryDelayMs: 200 },
+    { id: "gwCredit", type: "gateway", name: "Creditworthy?", branches: [{ edgeId: "e_gw_offer", when: "creditScore >= 650" }], defaultEdgeId: "e_gw_review" },
+    { id: "offer", type: "serviceTask", name: "Compute Offer", connectorId: "mock-mortgage", inputMap: { propertyValue: "amount", termYears: "termYears", annualIncome: "annualIncome" } },
+    { id: "sign", type: "userTask", name: "Review & Sign Offer", formId: "loan-sign-offer" },
+    { id: "gwSign", type: "gateway", name: "Accepted?", branches: [{ edgeId: "e_gws_appr", when: "accepted == true" }], defaultEdgeId: "e_gws_decl" },
+    { id: "review", type: "userTask", name: "Underwriter Review", formId: "loan-underwriter", candidateRole: "underwriter", priority: "high", slaHours: 24 },
+    { id: "gwReview", type: "gateway", name: "Underwriter decision?", branches: [{ edgeId: "e_gwr_offer", when: "reviewDecision == 'approve'" }], defaultEdgeId: "e_gwr_decl" },
+    { id: "endApproved", type: "end", name: "Approved" },
+    { id: "endDeclined", type: "end", name: "Declined" },
+  ],
+  edges: [
+    { id: "e_s_apply", from: "s", to: "apply" },
+    { id: "e_apply_credit", from: "apply", to: "credit" },
+    { id: "e_credit_gw", from: "credit", to: "gwCredit" },
+    { id: "e_gw_offer", from: "gwCredit", to: "offer" },
+    { id: "e_gw_review", from: "gwCredit", to: "review" },
+    { id: "e_offer_sign", from: "offer", to: "sign" },
+    { id: "e_sign_gw", from: "sign", to: "gwSign" },
+    { id: "e_gws_appr", from: "gwSign", to: "endApproved" },
+    { id: "e_gws_decl", from: "gwSign", to: "endDeclined" },
+    { id: "e_review_gw", from: "review", to: "gwReview" },
+    { id: "e_gwr_offer", from: "gwReview", to: "offer" },
+    { id: "e_gwr_decl", from: "gwReview", to: "endDeclined" },
+  ],
+  layout: {
+    s: { x: 40, y: 220 }, apply: { x: 170, y: 220 }, credit: { x: 330, y: 220 }, gwCredit: { x: 510, y: 220 },
+    offer: { x: 680, y: 120 }, sign: { x: 850, y: 120 }, gwSign: { x: 1030, y: 120 }, endApproved: { x: 1210, y: 120 },
+    review: { x: 680, y: 340 }, gwReview: { x: 860, y: 340 }, endDeclined: { x: 1030, y: 340 },
+  },
+};
+const loan: Template = {
+  id: "loan-preapproval",
+  name: "Loan Pre-Approval",
+  description:
+    "A personal-loan pre-approval: collect the application, run an automated credit check, auto-approve strong applicants, and route the rest to a human underwriter — then compute an offer and capture the customer's signature.",
+  teaches: [
+    "A multi-field application form feeding an automated credit-score check",
+    "A gateway that auto-approves on the score and routes the rest to a human",
+    "A prioritized, SLA-backed underwriter task (candidate role: underwriter)",
+    "A join: the underwriter's approval rejoins the automated offer path",
+    "Computed form fields showing the offer (monthly payment, score) read-only",
+  ],
+  steps: [
+    "Loan Application collects income, amount, term and employment.",
+    "Credit Check calls mock-credit-score → {creditScore, decision}.",
+    "Creditworthy? sends score ≥ 650 straight to the offer; the rest to Underwriter Review.",
+    "Underwriter Review (high priority, 24h SLA) approves → offer, or rejects → Declined.",
+    "Compute Offer calls mock-mortgage for the monthly payment; Review & Sign captures acceptance.",
+    "Accepted? ends at Approved or Declined.",
+  ],
+  definition: loanDef,
+  forms: [loanApplicationForm, loanSignForm, loanUnderwriterForm],
+  connectors: [
+    { id: "mock-credit-score", type: "mock-credit-score", config: {} },
+    { id: "mock-mortgage", type: "mock-mortgage", config: {} },
+  ],
+};
+
+export const TEMPLATES: Template[] = [onboarding, mortgage, credit, travel, loan];
 
 export function listTemplates() {
   return TEMPLATES.map((t) => ({

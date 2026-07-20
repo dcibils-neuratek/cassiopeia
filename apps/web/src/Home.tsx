@@ -4,7 +4,7 @@ import { api } from "./api.js";
 type PerProcess = { id: string; name: string; total: number; byStatus: Record<string, number> };
 type Stats = { processes: number; instances: number; byStatus: Record<string, number>; perProcess: PerProcess[] };
 
-export function Home({ onOpen, onTemplates }: { onOpen: (defId: string, mode: "build" | "run") => void; onTemplates: () => void }) {
+export function Home({ onOpen, onTemplates, onDelete }: { onOpen: (defId: string, mode: "build" | "run") => void; onTemplates: () => void; onDelete?: (id: string, name: string) => void }) {
   const [stats, setStats] = useState<Stats | null>(null);
   useEffect(() => {
     let alive = true;
@@ -32,8 +32,11 @@ export function Home({ onOpen, onTemplates }: { onOpen: (defId: string, mode: "b
 
       <div style={S.grid}>
         {stats?.perProcess.map((p) => (
-          <div key={p.id} className="hoverable" style={S.card}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{p.name}</div>
+          <div key={p.id} className="hoverable" style={{ ...S.card, position: "relative" }}>
+            {onDelete && (
+              <button title="Delete workflow" style={S.del} onClick={() => onDelete(p.id, p.name)}>×</button>
+            )}
+            <div style={{ fontSize: 16, fontWeight: 700, paddingRight: 20 }}>{p.name}</div>
             <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 12 }}>{p.id}</div>
             <div style={{ display: "flex", gap: 14, fontSize: 13, color: "var(--text-muted)" }}>
               <span><b style={{ color: "var(--text)" }}>{p.total}</b> runs</span>
@@ -72,4 +75,5 @@ const S: Record<string, React.CSSProperties> = {
   primary: { background: "var(--primary)", color: "white", border: 0, borderRadius: "var(--radius-sm)", padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   run: { background: "var(--success)", color: "white", border: 0, borderRadius: "var(--radius-sm)", padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   ghost: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  del: { position: "absolute", top: 10, right: 10, width: 24, height: 24, borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-faint)", cursor: "pointer", fontSize: 15, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" },
 };

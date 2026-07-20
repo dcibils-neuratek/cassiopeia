@@ -85,6 +85,11 @@ export function App() {
 
   async function useTemplate(id: string) { setDefId(id); await refreshDefs(); setMode("build"); }
   function openWorkflow(id: string, m: "build" | "run") { setDefId(id); setMode(m); }
+  async function deleteWorkflow(id: string, name: string) {
+    if (!window.confirm(`Delete "${name}" and all its runs? This cannot be undone.`)) return;
+    await api(`/definitions/${id}`, { method: "DELETE" });
+    await refreshDefs();
+  }
 
   if (!authReady) return null;
   if (!user) return <Login onLogin={setUser} />;
@@ -162,7 +167,7 @@ export function App() {
         </div>
 
         <div key={mode} className="fade-in" style={{ marginTop: 20 }}>
-          {mode === "home" && <Home onOpen={openWorkflow} onTemplates={() => setMode("templates")} />}
+          {mode === "home" && <Home onOpen={openWorkflow} onTemplates={() => setMode("templates")} onDelete={canSee(user.role, "settings") ? deleteWorkflow : undefined} />}
           {mode === "stats" && <Stats />}
           {mode === "templates" && <Templates onUse={useTemplate} />}
           {mode === "build" && <Designer key={defId} defId={defId} />}

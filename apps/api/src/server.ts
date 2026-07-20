@@ -21,6 +21,7 @@ import {
   claimTask,
   createSchedule,
   createTrigger,
+  deleteDefinition,
   deleteSchedule,
   deleteTrigger,
   getTrigger,
@@ -246,6 +247,15 @@ app.get("/definitions", async () => listDefinitions());
 app.get("/definitions/:id", async (req) => {
   const { id } = req.params as { id: string };
   return getDefinition(id);
+});
+
+// Delete a workflow and everything it owns.
+app.delete("/definitions/:id", async (req, reply) => {
+  if (!requireCap(req, reply, "admin")) return;
+  const { id } = req.params as { id: string };
+  deleteDefinition(id);
+  addAudit(actor(req).username, "definition.delete", id);
+  return { ok: true };
 });
 
 // LLM-generated functional description of a process. Optional {baseUrl, apiKey,
