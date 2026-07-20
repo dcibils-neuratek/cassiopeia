@@ -59,6 +59,7 @@ import { runConnector, listMcpTools } from "./connectors.js";
 import { startInstance, submitTask, retryInstance, startScheduler, resumeViaCallback } from "./runtime.js";
 import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBundle } from "./governance.js";
 import { computeAnalytics, analyzeProcess } from "./analytics.js";
+import { buildCase, listCaseSummaries } from "./case.js";
 import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
 import { bancoPage } from "./banco.js";
 import { startApplication, statusOf, acceptOffer, defIdForToken } from "./public-apply.js";
@@ -599,6 +600,14 @@ app.post("/forms/:id", async (req) => {
 
 app.get("/instances", async () => listInstances());
 
+// Business-readable executions list + per-case detail (for the Executions view).
+app.get("/executions", async () => listCaseSummaries());
+app.get("/instances/:id/case", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  try { return buildCase(id); }
+  catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
+});
+
 app.get("/instances/:id", async (req) => {
   const { id } = req.params as { id: string };
   const instance = getInstance(id);
@@ -739,7 +748,7 @@ app.post("/tasks/:taskId/claim", async (req, reply) => {
   const assignee = can(user.role, "admin") && body.assignee ? body.assignee : user.username;
   try {
     claimTask(taskId, assignee);
-    addAudit(user.username, "task.claim", taskId);
+    addAudit(user.username, "task.claim", getTask(taskId).instanceId);
     return { ok: true, assignee };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
@@ -759,7 +768,7 @@ app.post("/tasks/:taskId/reassign", async (req, reply) => {
   }
   claimTask(taskId, assignee);
   addNotification(assignee, "task-reassigned", `Task reassigned to you by ${user.username}`, task.instanceId);
-  addAudit(user.username, "task.reassign", `${taskId}->${assignee}`);
+  addAudit(user.username, "task.reassign", task.instanceId);
   return { ok: true, assignee };
 });
 
@@ -767,7 +776,7 @@ app.post("/tasks/:taskId/submit", async (req, reply) => {
   if (!requireCap(req, reply, "operate")) return;
   const { taskId } = req.params as { taskId: string };
   const body = (req.body ?? {}) as Record<string, unknown>;
-  addAudit(actor(req).username, "task.submit", taskId);
+  addAudit(actor(req).username, "task.submit", getTask(taskId).instanceId);
   const result = await submitTask(taskId, body as Record<string, never>);
   const task = getTask(taskId);
   return { result, instance: getInstance(task.instanceId) };

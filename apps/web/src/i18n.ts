@@ -7,7 +7,7 @@ export type Lang = "en" | "es";
 const DICT: Record<Lang, Record<string, string>> = {
   en: {
     home: "Home", stats: "Stats", templates: "Templates", build: "Build",
-    run: "Run", inbox: "Inbox", monitor: "Monitor", settings: "Settings",
+    run: "Run", inbox: "Inbox", monitor: "Executions", settings: "Settings",
     overview: "Overview", workflow: "Workflow",
     home_hint: "Your workflows at a glance",
     stats_hint: "Monitor runs across all workflows",
@@ -15,12 +15,12 @@ const DICT: Record<Lang, Record<string, string>> = {
     build_hint: "Design the process and its forms",
     run_hint: "Try it as an end user",
     inbox_hint: "Your worklist of open human tasks",
-    monitor_hint: "Watch running instances",
+    monitor_hint: "Every application, end to end — data, AI decisions, approvals",
     settings_hint: "API keys and connectors",
   },
   es: {
     home: "Inicio", stats: "Estadísticas", templates: "Plantillas", build: "Diseñar",
-    run: "Ejecutar", inbox: "Bandeja", monitor: "Monitor", settings: "Ajustes",
+    run: "Ejecutar", inbox: "Bandeja", monitor: "Ejecuciones", settings: "Ajustes",
     overview: "Resumen", workflow: "Flujo",
     home_hint: "Tus flujos de un vistazo",
     stats_hint: "Monitorea las ejecuciones de todos los flujos",
@@ -28,7 +28,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     build_hint: "Diseña el proceso y sus formularios",
     run_hint: "Pruébalo como usuario final",
     inbox_hint: "Tu lista de tareas humanas abiertas",
-    monitor_hint: "Observa las instancias en ejecución",
+    monitor_hint: "Cada solicitud, de punta a punta — datos, decisiones de IA y aprobaciones",
     settings_hint: "Claves de API y conectores",
   },
 };

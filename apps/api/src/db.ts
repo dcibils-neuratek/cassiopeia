@@ -697,6 +697,12 @@ export function listAudit(limit = 200): { ts: string; actor: string; action: str
     { ts: string; actor: string; action: string; target: string | null }[];
 }
 
+/** Task-related audit entries for one instance (target = instanceId), oldest first. */
+export function auditForInstance(instanceId: string): { ts: string; actor: string; action: string }[] {
+  return db.prepare(`SELECT ts, actor, action FROM audit_log WHERE target = ? AND action LIKE 'task.%' ORDER BY ts ASC`).all(instanceId) as
+    { ts: string; actor: string; action: string }[];
+}
+
 // ---- triggers (inbound webhooks) ----
 
 export interface TriggerRow { token: string; defId: string; label: string | null; enabled: number; createdAt: string }
