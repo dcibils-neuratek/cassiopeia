@@ -24,7 +24,9 @@ import {
   deleteDefinition,
   deleteSchedule,
   deleteTrigger,
+  ensurePublicTrigger,
   getTrigger,
+  getUserByUsername,
   listAudit,
   listComments,
   listConnectors,
@@ -58,6 +60,8 @@ import { startInstance, submitTask, retryInstance, startScheduler, resumeViaCall
 import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBundle } from "./governance.js";
 import { computeAnalytics, analyzeProcess } from "./analytics.js";
 import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
+import { bancoPage } from "./banco.js";
+import { startApplication, statusOf, acceptOffer, defIdForToken } from "./public-apply.js";
 
 const app = Fastify({ logger: true, bodyLimit: 20 * 1024 * 1024 }); // allow base64 file uploads
 await app.register(cors, { origin: true });
@@ -65,6 +69,20 @@ await app.register(cors, { origin: true });
 initDb();
 seedSample();
 seedAuth(); // default admin/admin on first run
+
+// Seed the "Banco del Futuro" demo: the loan flow, a public form token, and a
+// bank loan officer who approves borderline cases in the Inbox.
+try {
+  let hasLoan = false;
+  try { getDefinition("loan-preapproval"); hasLoan = true; } catch { hasLoan = false; }
+  if (!hasLoan) installTemplate("loan-preapproval");
+  ensurePublicTrigger("banco-del-futuro-loan", "loan-preapproval", "Banco del Futuro — public loan form");
+  if (!getUserByUsername("officer")) {
+    registerUser("officer", "officer", "Banco del Futuro — Mesa de Crédito", "operator");
+    console.warn("[demo] Seeded bank officer (officer/officer) for the Inbox.");
+  }
+} catch (err) { app.log.warn(`demo seed skipped: ${(err as Error).message}`); }
+
 startScheduler(); // resume timer nodes whose wake time has passed
 
 // ---- M11 auth: authenticate every non-public request ----
@@ -74,6 +92,8 @@ function isPublic(method: string, url: string): boolean {
   if (url.startsWith("/mock-")) return true; // called server-to-server by connectors
   if (url.startsWith("/hooks/")) return true; // inbound triggers (token in the path)
   if (url.startsWith("/callbacks/")) return true; // async connector callbacks (token in the path)
+  if (url === "/banco") return true; // public customer-facing bank page
+  if (url.startsWith("/apply/")) return true; // public application API (token-scoped)
   return false;
 }
 
@@ -165,6 +185,27 @@ app.post("/instances/:id/comments", async (req, reply) => {
 });
 
 app.get("/health", async () => ({ ok: true }));
+
+// ---- Banco del Futuro: public customer-facing loan site ----
+app.get("/banco", async (_req, reply) => {
+  reply.type("text/html");
+  return bancoPage("banco-del-futuro-loan");
+});
+app.post("/apply/:token", async (req, reply) => {
+  const { token } = req.params as { token: string };
+  try { return await startApplication(token, (req.body ?? {}) as Record<string, never>); }
+  catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+app.get("/apply/:token/:appId", async (req, reply) => {
+  const { token, appId } = req.params as { token: string; appId: string };
+  try { return statusOf(defIdForToken(token), appId); }
+  catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
+});
+app.post("/apply/:token/:appId/accept", async (req, reply) => {
+  const { token, appId } = req.params as { token: string; appId: string };
+  try { return await acceptOffer(token, appId); }
+  catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
 
 // Aggregate metrics for the Home and Stats screens.
 app.get("/stats", async () => {

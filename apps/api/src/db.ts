@@ -719,6 +719,13 @@ export function deleteTrigger(token: string): void {
   db.prepare(`DELETE FROM triggers WHERE token = ?`).run(token);
 }
 
+/** Create a trigger with a fixed, well-known token if it doesn't exist (for a public form). */
+export function ensurePublicTrigger(token: string, defId: string, label: string): void {
+  if (getTrigger(token)) return;
+  db.prepare(`INSERT INTO triggers (token, def_id, label, enabled, created_at) VALUES (?, ?, ?, 1, ?)`)
+    .run(token, defId, label, new Date().toISOString());
+}
+
 // ---- schedules (recurring starts) ----
 
 export interface ScheduleRow { id: string; defId: string; intervalSeconds: number; nextRun: string; enabled: number; label: string | null }

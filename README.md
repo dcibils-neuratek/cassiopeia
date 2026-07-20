@@ -53,6 +53,25 @@ pnpm dev:api     # API only, on http://localhost:3001
 pnpm dev:web     # web only, on http://localhost:5173 (proxies /api -> :3001)
 ```
 
+## Banco del Futuro — customer-facing demo
+
+A standalone, bank-branded loan site served by the API at **http://localhost:3001/banco**
+(no login — it's the customer's public page). It shows how an external site drives
+the BPM through a token-scoped public API:
+
+1. The customer fills a **wizard** form and submits → `POST /apply/:token` starts the
+   **Loan Pre-Approval** flow and runs the **real Claude credit agent** (tool-calling).
+2. Strong applicants see their **offer** immediately (with the agent's reasoning and
+   score); the wizard advances to **accept → sign → approved**.
+3. **Borderline** applicants land in **review** — the flow parks at the underwriter
+   task, which a **bank officer** approves in the Inbox (sign in to the studio as
+   **officer / officer**). The customer's page then auto-updates to the offer.
+
+The public API only acts on the customer's own instance and only on customer-facing
+tasks (staff tasks stay internal); it exposes just the safe offer fields. The page,
+the public form token, and the `officer` user are all seeded on first run. The credit
+agent needs the Claude API key set in **Settings** (see the AI Agent connector).
+
 ## Testing & deployment
 
 ```bash
