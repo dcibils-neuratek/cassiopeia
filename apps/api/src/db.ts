@@ -123,6 +123,27 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       action TEXT NOT NULL,
       target TEXT
     );
+    CREATE TABLE IF NOT EXISTS triggers (
+      token TEXT PRIMARY KEY,
+      def_id TEXT NOT NULL,
+      label TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS schedules (
+      id TEXT PRIMARY KEY,
+      def_id TEXT NOT NULL,
+      interval_seconds INTEGER NOT NULL,
+      next_run TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      label TEXT
+    );
+    CREATE TABLE IF NOT EXISTS callbacks (
+      token TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      status TEXT NOT NULL
+    );
   `);
   migrate();
 }
@@ -619,6 +640,70 @@ export function addAudit(actor: string, action: string, target?: string): void {
 export function listAudit(limit = 200): { ts: string; actor: string; action: string; target: string | null }[] {
   return db.prepare(`SELECT ts, actor, action, target FROM audit_log ORDER BY ts DESC LIMIT ?`).all(limit) as
     { ts: string; actor: string; action: string; target: string | null }[];
+}
+
+// ---- triggers (inbound webhooks) ----
+
+export interface TriggerRow { token: string; defId: string; label: string | null; enabled: number; createdAt: string }
+
+export function createTrigger(defId: string, label: string): TriggerRow {
+  const t: TriggerRow = { token: randomUUID().replace(/-/g, ""), defId, label: label || null, enabled: 1, createdAt: new Date().toISOString() };
+  db.prepare(`INSERT INTO triggers (token, def_id, label, enabled, created_at) VALUES (?, ?, ?, ?, ?)`)
+    .run(t.token, t.defId, t.label, t.enabled, t.createdAt);
+  return t;
+}
+export function getTrigger(token: string): TriggerRow | undefined {
+  const r = db.prepare(`SELECT * FROM triggers WHERE token = ?`).get(token) as any;
+  return r ? { token: r.token, defId: r.def_id, label: r.label, enabled: r.enabled, createdAt: r.created_at } : undefined;
+}
+export function listTriggers(defId: string): TriggerRow[] {
+  return (db.prepare(`SELECT * FROM triggers WHERE def_id = ? ORDER BY created_at DESC`).all(defId) as any[])
+    .map((r) => ({ token: r.token, defId: r.def_id, label: r.label, enabled: r.enabled, createdAt: r.created_at }));
+}
+export function deleteTrigger(token: string): void {
+  db.prepare(`DELETE FROM triggers WHERE token = ?`).run(token);
+}
+
+// ---- schedules (recurring starts) ----
+
+export interface ScheduleRow { id: string; defId: string; intervalSeconds: number; nextRun: string; enabled: number; label: string | null }
+
+export function createSchedule(defId: string, intervalSeconds: number, label: string): ScheduleRow {
+  const s: ScheduleRow = { id: randomUUID(), defId, intervalSeconds, nextRun: new Date(Date.now() + intervalSeconds * 1000).toISOString(), enabled: 1, label: label || null };
+  db.prepare(`INSERT INTO schedules (id, def_id, interval_seconds, next_run, enabled, label) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(s.id, s.defId, s.intervalSeconds, s.nextRun, s.enabled, s.label);
+  return s;
+}
+function rowToSchedule(r: any): ScheduleRow {
+  return { id: r.id, defId: r.def_id, intervalSeconds: r.interval_seconds, nextRun: r.next_run, enabled: r.enabled, label: r.label };
+}
+export function listSchedules(defId: string): ScheduleRow[] {
+  return (db.prepare(`SELECT * FROM schedules WHERE def_id = ? ORDER BY next_run ASC`).all(defId) as any[]).map(rowToSchedule);
+}
+export function dueSchedules(nowIso: string): ScheduleRow[] {
+  return (db.prepare(`SELECT * FROM schedules WHERE enabled = 1 AND next_run <= ?`).all(nowIso) as any[]).map(rowToSchedule);
+}
+export function bumpSchedule(id: string, nextRun: string): void {
+  db.prepare(`UPDATE schedules SET next_run = ? WHERE id = ?`).run(nextRun, id);
+}
+export function deleteSchedule(id: string): void {
+  db.prepare(`DELETE FROM schedules WHERE id = ?`).run(id);
+}
+
+// ---- callbacks (async connectors) ----
+
+export interface CallbackRow { token: string; instanceId: string; nodeId: string; status: string }
+
+export function createCallback(token: string, instanceId: string, nodeId: string): void {
+  db.prepare(`INSERT OR REPLACE INTO callbacks (token, instance_id, node_id, status) VALUES (?, ?, ?, 'open')`)
+    .run(token, instanceId, nodeId);
+}
+export function getCallback(token: string): CallbackRow | undefined {
+  const r = db.prepare(`SELECT * FROM callbacks WHERE token = ?`).get(token) as any;
+  return r ? { token: r.token, instanceId: r.instance_id, nodeId: r.node_id, status: r.status } : undefined;
+}
+export function completeCallback(token: string): void {
+  db.prepare(`UPDATE callbacks SET status = 'done' WHERE token = ?`).run(token);
 }
 
 export function listEvents(instanceId: string): StoredEvent[] {

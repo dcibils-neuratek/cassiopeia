@@ -99,11 +99,14 @@ export function Designer({ defId }: { defId: string }) {
   ]);
   // M9 governance
   const [govOpen, setGovOpen] = useState(false);
-  const [govTab, setGovTab] = useState<"versions" | "data" | "import">("versions");
+  const [govTab, setGovTab] = useState<"versions" | "data" | "automation" | "import">("versions");
   const [versions, setVersions] = useState<{ version: number; status: string; nodeCount: number; edgeCount: number }[]>([]);
   const [dataDict, setDataDict] = useState<{ entries: { key: string; producedBy: string[]; consumedBy: string[] }[]; warnings: string[] } | null>(null);
   const [importText, setImportText] = useState("");
   const [govMsg, setGovMsg] = useState("");
+  const [triggers, setTriggers] = useState<any[]>([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [newSchedMin, setNewSchedMin] = useState(60);
 
   async function reloadForms() {
     const r = await api(`/forms`);
@@ -219,9 +222,31 @@ export function Designer({ defId }: { defId: string }) {
   async function openGov() {
     setGovMsg(""); setGovTab("versions"); setImportText("");
     await api(`/definitions/${DEF_ID}/draft`, { method: "POST", body: JSON.stringify(toDefinition()) });
-    const [v, d] = await Promise.all([api(`/definitions/${DEF_ID}/versions`), api(`/definitions/${DEF_ID}/data-dictionary`)]);
+    const [v, d, tr, sc] = await Promise.all([
+      api(`/definitions/${DEF_ID}/versions`), api(`/definitions/${DEF_ID}/data-dictionary`),
+      api(`/definitions/${DEF_ID}/triggers`), api(`/definitions/${DEF_ID}/schedules`),
+    ]);
     setVersions(v.data); setDataDict(d.data);
+    setTriggers(tr.ok ? tr.data : []); setSchedules(sc.ok ? sc.data : []);
     setGovOpen(true);
+  }
+  async function addTrigger() {
+    const r = await api(`/definitions/${DEF_ID}/triggers`, { method: "POST", body: JSON.stringify({ label: "webhook" }) });
+    if (r.ok) setTriggers((await api(`/definitions/${DEF_ID}/triggers`)).data);
+    else setGovMsg(r.data?.error ?? "Creating a trigger needs admin");
+  }
+  async function delTrigger(token: string) {
+    await api(`/definitions/${DEF_ID}/triggers/${token}`, { method: "DELETE" });
+    setTriggers((ts) => ts.filter((t) => t.token !== token));
+  }
+  async function addSchedule() {
+    const r = await api(`/definitions/${DEF_ID}/schedules`, { method: "POST", body: JSON.stringify({ intervalSeconds: Math.max(1, newSchedMin) * 60, label: "recurring" }) });
+    if (r.ok) setSchedules((await api(`/definitions/${DEF_ID}/schedules`)).data);
+    else setGovMsg(r.data?.error ?? "Could not create schedule");
+  }
+  async function delSchedule(id: string) {
+    await api(`/definitions/${DEF_ID}/schedules/${id}`, { method: "DELETE" });
+    setSchedules((ss) => ss.filter((s) => s.id !== id));
   }
   async function restoreVersion(v: number) {
     await api(`/definitions/${DEF_ID}/restore/${v}`, { method: "POST" });
@@ -536,9 +561,9 @@ export function Designer({ defId }: { defId: string }) {
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                {(["versions", "data", "import"] as const).map((t) => (
+                {(["versions", "data", "automation", "import"] as const).map((t) => (
                   <button key={t} onClick={() => setGovTab(t)} style={govTab === t ? S.tabActive : S.tab}>
-                    {t === "versions" ? "Version history" : t === "data" ? "Data dictionary" : "Import"}
+                    {t === "versions" ? "Version history" : t === "data" ? "Data dictionary" : t === "automation" ? "Automation" : "Import"}
                   </button>
                 ))}
               </div>
@@ -579,6 +604,35 @@ export function Designer({ defId }: { defId: string }) {
                       {dataDict.entries.length === 0 && <tr><td style={S.gtd} colSpan={3}>No context keys yet.</td></tr>}
                     </tbody>
                   </table>
+                </>
+              )}
+
+              {govTab === "automation" && (
+                <>
+                  <div className="eyebrow" style={{ marginBottom: 4 }}>Webhook triggers</div>
+                  <p style={S.hint}>POST JSON to a trigger URL to start this workflow — the body becomes the initial context. No login needed (the token authorizes it). Creating a trigger needs admin.</p>
+                  {triggers.map((t) => (
+                    <div key={t.token} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                      <input readOnly style={{ ...S.input, flex: 1, fontFamily: "monospace", fontSize: 11 }} value={`${location.origin}/api/hooks/${t.token}`} onFocus={(e) => e.currentTarget.select()} />
+                      <span style={S.hint}>{t.label}</span>
+                      <button style={S.ghost} onClick={() => delTrigger(t.token)}>✕</button>
+                    </div>
+                  ))}
+                  <button style={S.ghost} onClick={addTrigger}>+ Webhook trigger</button>
+
+                  <div className="eyebrow" style={{ margin: "16px 0 4px" }}>Schedules</div>
+                  <p style={S.hint}>Start this workflow automatically on a recurring interval.</p>
+                  {schedules.map((s) => (
+                    <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, fontSize: 13 }}>
+                      <span>Every <b>{Math.round(s.intervalSeconds / 60)}</b> min {s.label ? `· ${s.label}` : ""}</span>
+                      <span style={S.hint}>next {new Date(s.nextRun).toLocaleTimeString()}</span>
+                      <button style={S.ghost} onClick={() => delSchedule(s.id)}>✕</button>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+                    Every <input type="number" min={1} style={{ ...S.input, width: 80 }} value={newSchedMin} onChange={(e) => setNewSchedMin(Number(e.target.value) || 1)} /> minutes
+                    <button style={S.ghost} onClick={addSchedule}>+ Schedule</button>
+                  </div>
                 </>
               )}
 

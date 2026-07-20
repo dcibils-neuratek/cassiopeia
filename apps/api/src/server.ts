@@ -16,8 +16,15 @@ import {
   listDefinitionVersions,
   addAudit,
   claimTask,
+  createSchedule,
+  createTrigger,
+  deleteSchedule,
+  deleteTrigger,
+  getTrigger,
   listAudit,
   listConnectors,
+  listSchedules,
+  listTriggers,
   listDefinitions,
   listEvents,
   listForms,
@@ -37,7 +44,7 @@ import { listTemplates, installTemplate } from "./templates.js";
 import { describeProcess } from "./describe.js";
 import { generateWorkflow } from "./ai-build.js";
 import { runConnector, listMcpTools } from "./connectors.js";
-import { startInstance, submitTask, retryInstance, startScheduler } from "./runtime.js";
+import { startInstance, submitTask, retryInstance, startScheduler, resumeViaCallback } from "./runtime.js";
 import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBundle } from "./governance.js";
 import { computeAnalytics, analyzeProcess } from "./analytics.js";
 import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
@@ -55,6 +62,8 @@ function isPublic(method: string, url: string): boolean {
   if (url === "/health") return true;
   if (method === "POST" && url === "/auth/login") return true;
   if (url.startsWith("/mock-")) return true; // called server-to-server by connectors
+  if (url.startsWith("/hooks/")) return true; // inbound triggers (token in the path)
+  if (url.startsWith("/callbacks/")) return true; // async connector callbacks (token in the path)
   return false;
 }
 
@@ -515,6 +524,72 @@ app.post("/definitions/:id/start", async (req, reply) => {
   const { id } = req.params as { id: string };
   addAudit(actor(req).username, "instance.start", id);
   return startInstance(id);
+});
+
+// ---- M13 triggers & schedules ----
+
+// Inbound webhook (public, token-authenticated) — start an instance with the posted body as context.
+app.post("/hooks/:token", async (req, reply) => {
+  const { token } = req.params as { token: string };
+  const trig = getTrigger(token);
+  if (!trig || !trig.enabled) return reply.code(404).send({ ok: false, error: "Unknown trigger" });
+  const body = (req.body ?? {}) as Record<string, never>;
+  const { instanceId } = await startInstance(trig.defId, body);
+  return { ok: true, instanceId };
+});
+
+// Async connector callback (public, token-authenticated) — resume a parked instance.
+app.post("/callbacks/:token", async (req, reply) => {
+  const { token } = req.params as { token: string };
+  try {
+    const result = await resumeViaCallback(token, (req.body ?? {}) as Record<string, never>);
+    return { ok: true, result };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// Trigger management.
+app.get("/definitions/:id/triggers", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const { id } = req.params as { id: string };
+  return listTriggers(id);
+});
+app.post("/definitions/:id/triggers", async (req, reply) => {
+  if (!requireCap(req, reply, "admin")) return;
+  const { id } = req.params as { id: string };
+  const { label } = (req.body ?? {}) as { label?: string };
+  const t = createTrigger(id, label ?? "");
+  addAudit(actor(req).username, "trigger.create", id);
+  return { ok: true, trigger: t };
+});
+app.delete("/definitions/:id/triggers/:token", async (req, reply) => {
+  if (!requireCap(req, reply, "admin")) return;
+  const { token } = req.params as { token: string };
+  deleteTrigger(token);
+  return { ok: true };
+});
+
+// Schedule management (interval-based recurring starts).
+app.get("/definitions/:id/schedules", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const { id } = req.params as { id: string };
+  return listSchedules(id);
+});
+app.post("/definitions/:id/schedules", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const { id } = req.params as { id: string };
+  const { intervalSeconds, label } = (req.body ?? {}) as { intervalSeconds?: number; label?: string };
+  if (!intervalSeconds || intervalSeconds < 5) return reply.code(400).send({ ok: false, error: "intervalSeconds must be >= 5" });
+  const s = createSchedule(id, Math.floor(intervalSeconds), label ?? "");
+  addAudit(actor(req).username, "schedule.create", id);
+  return { ok: true, schedule: s };
+});
+app.delete("/definitions/:id/schedules/:sid", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const { sid } = req.params as { sid: string };
+  deleteSchedule(sid);
+  return { ok: true };
 });
 
 // Re-run a failed instance from where it stopped (e.g. after a flaky dependency recovers).

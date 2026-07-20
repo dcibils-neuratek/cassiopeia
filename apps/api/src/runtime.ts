@@ -10,18 +10,24 @@ import {
   advance,
   completeTask,
   resumeTimer,
+  resumeCallback,
   type AdvanceResult,
   type EngineDeps,
 } from "@cassiopeia/engine";
 import type { Context, Json, ProcessDefinition, ProcessInstance } from "@cassiopeia/model";
 import {
   addEvent,
+  bumpSchedule,
+  completeCallback,
   completeTaskRow,
+  createCallback,
   createInstance,
   createTask,
   createTimer,
+  dueSchedules,
   dueTimers,
   fireTimerRow,
+  getCallback,
   getDefinition,
   getInstance,
   getTask,
@@ -82,16 +88,19 @@ function onParked(def: ProcessDefinition, inst: ProcessInstance, result: Advance
     }
     if (!wakeAt) wakeAt = new Date(Date.now() + (node.delaySeconds ?? 0) * 1000).toISOString();
     createTimer(inst.id, node.id, wakeAt);
+  } else if (result.status === "awaiting") {
+    createCallback(result.token, inst.id, result.node.id);
   }
 }
 
 /** Start a new instance of a definition and run it until the first wait/sleep/end. */
-export async function startInstance(defId: string): Promise<{
+export async function startInstance(defId: string, initialContext?: Context): Promise<{
   instanceId: string;
   result: AdvanceResult;
 }> {
   const def = getDefinition(defId);
   const inst = createInstance(def.id, def.version, def.startNodeId);
+  if (initialContext && typeof initialContext === "object") inst.context = { ...initialContext };
   addEvent(inst.id, { type: "instance.started" }, new Date().toISOString());
 
   const result = await advance(def, inst, depsFor(inst.id));
@@ -157,10 +166,36 @@ export async function fireDueTimers(): Promise<number> {
   return fired;
 }
 
-/** Poll for due timers on an interval. Returns a stop function. */
+/** Resume an instance parked on an async connector, with the callback's data. */
+export async function resumeViaCallback(token: string, data: Context): Promise<AdvanceResult> {
+  const cb = getCallback(token);
+  if (!cb || cb.status !== "open") throw new Error("Unknown or already-used callback token");
+  const inst = getInstance(cb.instanceId);
+  const def = getDefinition(inst.defId, inst.defVersion);
+  const result = await resumeCallback(def, inst, cb.nodeId, data, depsFor(inst.id));
+  completeCallback(token);
+  saveInstance(inst);
+  onParked(def, inst, result);
+  return result;
+}
+
+/** Start any recurring schedules whose next-run time has passed. */
+export async function fireDueSchedules(): Promise<number> {
+  const now = Date.now();
+  const due = dueSchedules(new Date(now).toISOString());
+  let started = 0;
+  for (const s of due) {
+    bumpSchedule(s.id, new Date(now + s.intervalSeconds * 1000).toISOString());
+    try { await startInstance(s.defId); started++; } catch { /* def may be gone */ }
+  }
+  return started;
+}
+
+/** Poll for due timers and schedules on an interval. Returns a stop function. */
 export function startScheduler(intervalMs = 1000): () => void {
   const t = setInterval(() => {
     fireDueTimers().catch(() => { /* logged via events */ });
+    fireDueSchedules().catch(() => { /* def may be gone */ });
   }, intervalMs);
   if (typeof t.unref === "function") t.unref();
   return () => clearInterval(t);

@@ -27,6 +27,8 @@ export interface EngineEvent {
     | "service.completed"
     | "service.failed"
     | "service.retried"
+    | "service.pending"
+    | "callback.received"
     | "agent.usage"
     | "gateway.evaluated"
     | "timer.scheduled"
@@ -47,6 +49,7 @@ export interface EngineDeps {
 export type AdvanceResult =
   | { status: "waiting"; task: UserTaskNode }
   | { status: "sleeping"; timer: TimerNode }
+  | { status: "awaiting"; node: ServiceTaskNode; token: string }
   | { status: "completed" }
   | { status: "failed"; error: string };
 
@@ -264,6 +267,14 @@ export async function advance(
             deps.emit({ type: "instance.failed", nodeId: node.id, payload: { error: message } });
             return { status: "failed", error: message };
           }
+          // Async connector: it kicked off external work and will call back.
+          // Park until resumeCallback() arrives with the real result.
+          if (result && (result as Record<string, Json>).__awaitCallback) {
+            instance.status = "waiting";
+            const token = String((result as Record<string, Json>).__callbackToken ?? "");
+            deps.emit({ type: "service.pending", nodeId: node.id, payload: { token } });
+            return { status: "awaiting", node, token };
+          }
           applyOutputMap(instance.context, result, node.outputMap);
           deps.emit({
             type: "service.completed",
@@ -358,5 +369,29 @@ export async function resumeTimer(
   }
   deps.emit({ type: "timer.fired", nodeId: node.id });
   instance.currentNodeId = singleNext(def, node.id);
+  return advance(def, instance, deps);
+}
+
+/**
+ * Resume a service task that was awaiting an async callback: merge the callback
+ * data into the context (via the node's outputMap) and run forward.
+ */
+export async function resumeCallback(
+  def: ProcessDefinition,
+  instance: ProcessInstance,
+  nodeId: string,
+  data: Context,
+  deps: EngineDeps,
+): Promise<AdvanceResult> {
+  const node = getNode(def, nodeId);
+  if (node.type !== "serviceTask") {
+    return { status: "failed", error: `Node ${nodeId} is not a service task` };
+  }
+  if (instance.currentNodeId !== nodeId) {
+    return { status: "failed", error: `Instance is not awaiting at ${nodeId} (at ${instance.currentNodeId})` };
+  }
+  applyOutputMap(instance.context, data, node.outputMap);
+  deps.emit({ type: "callback.received", nodeId: node.id, payload: data as Json });
+  instance.currentNodeId = serviceNext(def, node);
   return advance(def, instance, deps);
 }

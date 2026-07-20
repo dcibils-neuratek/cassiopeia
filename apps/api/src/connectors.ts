@@ -3,6 +3,7 @@
 // interface is deferred (see design doc). Adapters dispatch on connector `type`.
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 import type { Context, Json } from "@cassiopeia/model";
 import { getConnector } from "./db.js";
 
@@ -307,6 +308,27 @@ const adapters: Record<string, Adapter> = {
     const textOut = (Array.isArray(result.content) ? result.content : [])
       .filter((c: any) => c?.type === "text").map((c: any) => c.text).join("\n");
     try { return JSON.parse(stripFences(textOut)) as Context; } catch { return { mcpText: textOut }; }
+  },
+
+  // Async connector — kicks off long-running external work (e.g. a slow agent)
+  // and returns immediately; the instance parks until the external system POSTs
+  // the result to the callback URL. config: { url, callbackBaseUrl?, headers? }.
+  // The engine sees __awaitCallback and waits; resumeCallback() continues the run.
+  "async-callback": async (input, config) => {
+    const url = String(config.url ?? "");
+    const token = randomUUID().replace(/-/g, "");
+    const base = String(config.callbackBaseUrl ?? "http://localhost:3001/callbacks").replace(/\/+$/, "");
+    const callbackUrl = `${base}/${token}`;
+    if (url) {
+      try {
+        await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...(config.headers as object) },
+          body: JSON.stringify({ input, callbackUrl }),
+        });
+      } catch { /* fire-and-forget kickoff; the callback is the real signal */ }
+    }
+    return { __awaitCallback: true, __callbackToken: token, callbackUrl };
   },
 
   // Generic REST connector. config: { url, method?, headers? }.

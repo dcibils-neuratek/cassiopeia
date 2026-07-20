@@ -81,7 +81,7 @@ The differentiator. Agents that use tools mid-reasoning; humans supervise.
   where a human approves/edits an agent's decision before the flow continues.
 - **Token/cost tracking** per step, surfaced in Monitor/Stats.
 
-### M13 — Triggers & async
+### M13 — Triggers & async ✅
 Start processes from the outside; support long-running agents.
 - Inbound **webhooks / API** to start instances; **scheduled (cron)** starts.
 - **Async connectors** with callback (agent replies later → resume via a token).

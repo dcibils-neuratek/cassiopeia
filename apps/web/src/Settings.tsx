@@ -39,11 +39,12 @@ export function Settings() {
     reload();
   }
   function newConnector(type: string) {
-    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : type === "http" ? "http" : "ai";
+    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : type === "http" ? "http" : type === "async-callback" ? "async" : "ai";
     const id = `${prefix}_${Math.random().toString(36).slice(2, 6)}`;
     const config = type === "maverick-agent" ? { baseUrl: "https://your-maverick-host", apiKey: "", agentId: "" }
       : type === "mcp" ? { url: "https://your-mcp-server/mcp", toolName: "", apiKey: "" }
       : type === "http" ? { url: "", method: "POST" }
+      : type === "async-callback" ? { url: "https://your-async-service/kickoff", callbackBaseUrl: "http://localhost:3001/callbacks" }
       : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: "You are a task agent inside a business process.", jsonOutput: true };
     const c = { id, type, config };
     setConnectors((cs) => [...cs, c]);
@@ -110,6 +111,7 @@ export function Settings() {
             <button style={S.ghost} onClick={() => newConnector("maverick-agent")}>+ Maverick</button>
             <button style={S.ghost} onClick={() => newConnector("mcp")}>+ MCP</button>
             <button style={S.ghost} onClick={() => newConnector("http")}>+ HTTP</button>
+            <button style={S.ghost} onClick={() => newConnector("async-callback")}>+ Async</button>
           </div>
         </div>
         <p style={S.hint}>API keys for AI-agent and Maverick connectors live here — configure once, reuse across workflows.</p>
@@ -161,6 +163,13 @@ export function Settings() {
                 {sel.type === "http" && <>
                   <L>URL</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
                   <L>Method</L><input style={S.input} value={sel.config.method ?? "POST"} onChange={(e) => setCfg(sel.id, "method", e.target.value)} />
+                </>}
+                {sel.type === "async-callback" && <>
+                  <L>Kickoff URL <span style={S.hint}>receives {"{ input, callbackUrl }"}</span></L>
+                  <input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
+                  <L>Callback base URL</L>
+                  <input style={S.input} value={sel.config.callbackBaseUrl ?? ""} onChange={(e) => setCfg(sel.id, "callbackBaseUrl", e.target.value)} />
+                  <p style={S.hint}>The instance parks after kickoff and resumes when the external system POSTs its result JSON back to the callback URL.</p>
                 </>}
                 {sel.type.startsWith("mock") && <p style={S.hint}>Built-in mock connector — no configuration.</p>}
 
