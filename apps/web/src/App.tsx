@@ -9,6 +9,7 @@ import { Settings } from "./Settings.js";
 import { Inbox } from "./Inbox.js";
 import { Login, type CurrentUser } from "./Login.js";
 import { api, getToken, setToken } from "./api.js";
+import { t, getLang, setLang, type Lang } from "./i18n.js";
 
 type Mode = "home" | "stats" | "templates" | "build" | "run" | "inbox" | "monitor" | "settings";
 type DefSummary = { id: string; name: string };
@@ -48,6 +49,11 @@ export function App() {
   const [defs, setDefs] = useState<DefSummary[]>([]);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">(() => (localStorage.getItem("cass.theme") as "light" | "dark") || "light");
+  const [lang, setLangState] = useState<Lang>(getLang());
+
+  useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem("cass.theme", theme); } catch { /* ignore */ } }, [theme]);
+  function toggleLang() { const nl: Lang = lang === "en" ? "es" : "en"; setLang(nl); setLangState(nl); }
 
   // Resolve the current session on load; react to forced logout (401).
   useEffect(() => {
@@ -102,11 +108,11 @@ export function App() {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {groups.map((g) => (
             <div key={g.label} style={{ marginBottom: 14 }}>
-              <div className="eyebrow" style={{ padding: "0 20px", marginBottom: 6 }}>{g.label}</div>
+              <div className="eyebrow" style={{ padding: "0 20px", marginBottom: 6 }}>{t(g.label.toLowerCase())}</div>
               <nav style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: 2 }}>
                 {g.items.map((id) => (
                   <button key={id} className={mode === id ? undefined : "nav-item"} onClick={() => setMode(id)} style={navItem(mode === id)}>
-                    <span style={chip(mode === id)}><Icon name={id} /></span>{TITLES[id]}
+                    <span style={chip(mode === id)}><Icon name={id} /></span>{t(id)}
                   </button>
                 ))}
               </nav>
@@ -117,7 +123,7 @@ export function App() {
         <nav style={{ padding: "8px 12px 0", borderTop: "1px solid var(--border)" }}>
           {canSee(user.role, "settings") && (
             <button className={mode === "settings" ? undefined : "nav-item"} onClick={() => setMode("settings")} style={navItem(mode === "settings")}>
-              <span style={chip(mode === "settings")}><Icon name="settings" /></span>Settings
+              <span style={chip(mode === "settings")}><Icon name="settings" /></span>{t("settings")}
             </button>
           )}
         </nav>
@@ -136,10 +142,10 @@ export function App() {
       <main style={S.main}>
         <div style={S.topbar}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{TITLES[mode]}</h1>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>{HINTS[mode]}</div>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{t(mode)}</h1>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>{t(mode + "_hint")}</div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {showPicker && (
               <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
                 Process
@@ -149,6 +155,8 @@ export function App() {
                 </select>
               </label>
             )}
+            <button onClick={toggleLang} title="Language" style={S.iconPill}>{lang.toUpperCase()}</button>
+            <button onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))} title="Theme" style={S.iconPill}>{theme === "dark" ? "☀" : "☾"}</button>
             <NotificationBell />
           </div>
         </div>
@@ -259,4 +267,5 @@ const S: Record<string, React.CSSProperties> = {
   main: { flex: 1, minWidth: 0, padding: "22px 32px 40px" },
   topbar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, paddingBottom: 18, borderBottom: "1px solid var(--border)" },
   select: { border: "1px solid var(--border-strong)", borderRadius: 8, padding: "7px 10px", fontSize: 13, color: "var(--text)", background: "var(--surface)", fontWeight: 600 },
+  iconPill: { width: 38, height: 38, borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-muted)", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
 };

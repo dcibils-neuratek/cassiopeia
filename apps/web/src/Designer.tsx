@@ -214,6 +214,22 @@ export function Designer({ defId }: { defId: string }) {
     const r = await api(`/definitions/${DEF_ID}/edit`);
     applyDef(r.data as ProcessDefinition);
   }
+  // Tidy the canvas: BFS-layer nodes left→right from the start node.
+  function autoLayout() {
+    const adj = new Map<string, string[]>();
+    for (const e of edges) { const a = adj.get(e.source) ?? adj.set(e.source, []).get(e.source)!; a.push(e.target); }
+    const start = nodes.find((n) => n.data.node.type === "start");
+    const layer = new Map<string, number>();
+    if (start) {
+      const q = [start.id]; layer.set(start.id, 0);
+      while (q.length) { const cur = q.shift()!; const l = layer.get(cur)!; for (const to of adj.get(cur) ?? []) if (!layer.has(to)) { layer.set(to, l + 1); q.push(to); } }
+    }
+    const byLayer = new Map<number, string[]>();
+    for (const n of nodes) { const l = layer.get(n.id) ?? 0; const a = byLayer.get(l) ?? byLayer.set(l, []).get(l)!; a.push(n.id); }
+    const pos = new Map<string, { x: number; y: number }>();
+    byLayer.forEach((ids, l) => ids.forEach((id, i) => pos.set(id, { x: 60 + l * 240, y: 60 + i * 110 })));
+    setNodes((nds) => nds.map((n) => ({ ...n, position: pos.get(n.id) ?? n.position })));
+  }
   async function exportWorkflow() {
     await api(`/definitions/${DEF_ID}/draft`, { method: "POST", body: JSON.stringify(toDefinition()) });
     const r = await api(`/definitions/${DEF_ID}/export`);
@@ -374,6 +390,7 @@ export function Designer({ defId }: { defId: string }) {
         <div style={{ flex: 1 }} />
         <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Build with AI</button>
         <button style={S.describe} onClick={openDescribe}>✦ Describe</button>
+        <button style={S.ghost} onClick={autoLayout} title="Tidy the layout">⤢ Tidy</button>
         <button style={S.ghost} onClick={openGov}>Manage</button>
         <button style={S.ghost} onClick={exportWorkflow}>Export</button>
         <button style={S.ghost} onClick={() => persist(false)}>Save draft</button>

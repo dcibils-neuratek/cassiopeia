@@ -4,6 +4,7 @@ One file per milestone, each describing what was added **functionally** (what a
 user can now do) and **technically** (how it was built), plus how it was
 verified. Newest first.
 
+- [M18 — UX & i18n polish](M18.md)
 - [M17 — Quality & delivery](M17.md)
 - [M16 — Forms & documents](M16.md)
 - [M15 — Notifications & collaboration](M15.md)

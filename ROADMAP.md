@@ -105,7 +105,7 @@ BPMN-grade orchestration.
   config; **Postgres via Drizzle** (repo layer already isolates SQL); dev/test/prod
   environments + promotion.
 
-### M18 — UX & i18n polish
+### M18 — UX & i18n polish ✅
 - Canvas **undo/redo**, **auto-layout**, search; **dark mode**; keyboard shortcuts;
   better empty states; **i18n (Spanish / English)**.
 

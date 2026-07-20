@@ -53,6 +53,37 @@
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px -2px rgba(16, 24, 40, 0.06);
   --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.08), 0 12px 24px -6px rgba(16, 24, 40, 0.10);
   --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, 0.18), 0 4px 8px -4px rgba(16, 24, 40, 0.08);
+
+  color-scheme: light;
+}
+
+/* ---- dark theme (toggled via data-theme on <html>) --------------------- */
+:root[data-theme="dark"] {
+  --bg: #0b1120;
+  --bg-2: #0f172a;
+  --surface: #141d31;
+  --surface-2: #0f1728;
+  --surface-3: #1d2942;
+  --border: #24324f;
+  --border-strong: #37496d;
+  --text: #e7ecf7;
+  --text-muted: #9fb0c9;
+  --text-faint: #6b7c99;
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+  --primary-strong: #93c5fd;
+  --primary-tint: #17233d;
+  --primary-tint-2: #1f3153;
+  --success-tint: #0e2a1a;
+  --warn-tint: #2a1e0a;
+  --danger-tint: #2a1414;
+  --info-tint: #0a2230;
+  --ring: 0 0 0 3px rgba(59, 130, 246, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.45), 0 12px 24px -6px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
