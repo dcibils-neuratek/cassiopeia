@@ -70,6 +70,7 @@ import { bancoPage } from "./banco.js";
 import {
   startApplication, statusOf, submitStep, defIdForToken, intakeForm,
   journeyIntake, resolveJourney, saveJourneyDraft, submitJourneyStep,
+  listOpenDrafts, remindDraft,
 } from "./public-apply.js";
 import { getJourney } from "./journeys.js";
 
@@ -271,6 +272,32 @@ app.post("/apply/:token/:appId/step", async (req, reply) => {
   const { token, appId } = req.params as { token: string; appId: string };
   try { return await submitStep(token, appId, (req.body ?? {}) as Record<string, never>); }
   catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+
+// ---- abandoned drafts (staff): list incomplete applications + recovery email ----
+// The public portal URL: the bank sets it in Settings → Correo (so resume links
+// point at their domain); falls back to the request host in dev.
+function portalBaseOf(req: { protocol?: string; headers: Record<string, unknown> }): string {
+  try {
+    const pb = getConnector("mailer").config.portalBase;
+    if (pb) return String(pb).replace(/\/+$/, "");
+  } catch { /* no mailer configured */ }
+  return `${req.protocol ?? "http"}://${String(req.headers.host ?? "localhost:3001")}`;
+}
+
+app.get("/drafts", async (req) => listOpenDrafts(portalBaseOf(req)));
+app.post("/drafts/remind", async (req, reply) => {
+  const { appId, nodeId } = (req.body ?? {}) as { appId?: string; nodeId?: string };
+  if (!appId || !nodeId) return reply.code(400).send({ ok: false, error: "Falta appId o nodeId" });
+  try { const r = await remindDraft(appId, nodeId, portalBaseOf(req)); return { ok: true, ...r }; }
+  catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+// Local stand-in for an email provider, so the recovery flow is testable without
+// credentials. Logs the message and returns ok.
+app.post("/mock-email", async (req) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  app.log.info(`[mock-email] to=${b.to} subject=${b.subject}`);
+  return { ok: true, id: `mock-${Date.now()}` };
 });
 
 // Aggregate metrics for the Home and Stats screens.

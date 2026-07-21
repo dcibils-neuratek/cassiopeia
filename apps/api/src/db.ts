@@ -175,10 +175,12 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       app_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
       def_id TEXT NOT NULL,
+      token TEXT,
       form_id TEXT,
       data_json TEXT NOT NULL,
       page INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
+      created_at TEXT,
       PRIMARY KEY (app_id, node_id)
     );
   `);
@@ -202,6 +204,8 @@ function migrate(): void {
   addColumnIfMissing("tasks", "priority", "priority TEXT");
   addColumnIfMissing("tasks", "escalated", "escalated INTEGER DEFAULT 0");
   addColumnIfMissing("users", "area", "area TEXT");
+  addColumnIfMissing("form_drafts", "token", "token TEXT");
+  addColumnIfMissing("form_drafts", "created_at", "created_at TEXT");
 }
 
 // ---- definitions ----
@@ -877,10 +881,26 @@ export interface FormDraft {
   appId: string;
   nodeId: string;
   defId: string;
+  token: string | null;
   formId: string | null;
   data: Context;
   page: number;
   updatedAt: string;
+  createdAt: string | null;
+}
+
+function rowToDraft(r: Record<string, unknown>): FormDraft {
+  return {
+    appId: r.app_id as string,
+    nodeId: r.node_id as string,
+    defId: r.def_id as string,
+    token: (r.token as string) ?? null,
+    formId: (r.form_id as string) ?? null,
+    data: JSON.parse((r.data_json as string) || "{}"),
+    page: (r.page as number) ?? 0,
+    updatedAt: r.updated_at as string,
+    createdAt: (r.created_at as string) ?? null,
+  };
 }
 
 /** Upsert the partial input for one open customer task. */
@@ -891,30 +911,29 @@ export function saveDraft(
   formId: string | null,
   data: Context,
   page: number,
+  token: string | null = null,
 ): void {
+  const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO form_drafts (app_id, node_id, def_id, form_id, data_json, page, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO form_drafts (app_id, node_id, def_id, token, form_id, data_json, page, updated_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(app_id, node_id) DO UPDATE SET
        data_json = excluded.data_json, page = excluded.page,
-       form_id = excluded.form_id, updated_at = excluded.updated_at`,
-  ).run(appId, nodeId, defId, formId, JSON.stringify(data ?? {}), page, new Date().toISOString());
+       form_id = excluded.form_id, token = excluded.token, updated_at = excluded.updated_at`,
+  ).run(appId, nodeId, defId, token, formId, JSON.stringify(data ?? {}), page, now, now);
 }
 
 export function getDraft(appId: string, nodeId: string): FormDraft | undefined {
   const r = db.prepare(`SELECT * FROM form_drafts WHERE app_id = ? AND node_id = ?`).get(appId, nodeId) as
     | Record<string, unknown>
     | undefined;
-  if (!r) return undefined;
-  return {
-    appId: r.app_id as string,
-    nodeId: r.node_id as string,
-    defId: r.def_id as string,
-    formId: (r.form_id as string) ?? null,
-    data: JSON.parse((r.data_json as string) || "{}"),
-    page: (r.page as number) ?? 0,
-    updatedAt: r.updated_at as string,
-  };
+  return r ? rowToDraft(r) : undefined;
+}
+
+/** All open drafts (incomplete applications), most recently touched first. */
+export function listDrafts(): FormDraft[] {
+  const rows = db.prepare(`SELECT * FROM form_drafts ORDER BY updated_at DESC`).all() as Record<string, unknown>[];
+  return rows.map(rowToDraft);
 }
 
 /** Any draft for this application (used before an instance exists — the intake). */

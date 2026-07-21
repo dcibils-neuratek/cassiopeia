@@ -8,7 +8,7 @@ const DICT: Record<Lang, Record<string, string>> = {
   en: {
     home: "Home", stats: "Stats", templates: "Templates", build: "Flows",
     forms: "Forms", agents: "Agents",
-    run: "Run", inbox: "Inbox", monitor: "Executions", settings: "Settings",
+    run: "Run", inbox: "Inbox", monitor: "Executions", drafts: "Incomplete", settings: "Settings",
     overview: "Overview", workflow: "Workflow", design: "Design", operate: "Operate",
     home_hint: "Your workflows at a glance",
     stats_hint: "Monitor runs across all workflows",
@@ -19,12 +19,13 @@ const DICT: Record<Lang, Record<string, string>> = {
     run_hint: "Try it as an end user",
     inbox_hint: "Your worklist of open human tasks",
     monitor_hint: "Every application, end to end — data, AI decisions, approvals",
+    drafts_hint: "Applications a customer started but never finished — nudge them to come back",
     settings_hint: "API keys and connectors",
   },
   es: {
     home: "Inicio", stats: "Estadísticas", templates: "Plantillas", build: "Flujos",
     forms: "Formularios", agents: "Agentes",
-    run: "Ejecutar", inbox: "Bandeja", monitor: "Ejecuciones", settings: "Ajustes",
+    run: "Ejecutar", inbox: "Bandeja", monitor: "Ejecuciones", drafts: "Sin completar", settings: "Ajustes",
     overview: "Resumen", workflow: "Flujo", design: "Diseño", operate: "Operación",
     home_hint: "Tus flujos de un vistazo",
     stats_hint: "Monitorea las ejecuciones de todos los flujos",
@@ -35,6 +36,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     run_hint: "Pruébalo como usuario final",
     inbox_hint: "Tu lista de tareas humanas abiertas",
     monitor_hint: "Cada solicitud, de punta a punta — datos, decisiones de IA y aprobaciones",
+    drafts_hint: "Solicitudes que un cliente empezó y dejó a medias — invitalo a volver",
     settings_hint: "Claves de API y conectores",
   },
 };

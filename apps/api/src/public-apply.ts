@@ -9,9 +9,10 @@ import type { Context, FormDefinition, ProcessDefinition } from "@cassiopeia/mod
 import { getNode } from "@cassiopeia/model";
 import {
   deleteDraft, getDefinition, getDraft, getForm, getInstance, getTrigger,
-  openTaskForInstance, saveDraft,
+  listDrafts, openTaskForInstance, saveDraft,
 } from "./db.js";
 import { startInstance, submitTask } from "./runtime.js";
+import { sendEmail } from "./email.js";
 import {
   getJourney, intakeStep, publicSteps, type Journey, type JourneyPage,
   type JourneyStepPublic,
@@ -170,7 +171,7 @@ export function saveJourneyDraft(token: string, appId: string, data: Context, pa
   if (!nodeId) throw new Error("No hay un paso de formulario para guardar");
   const node = getNode(getDefinition(j.defId), nodeId);
   const formId = node.type === "userTask" ? (node.formId ?? null) : null;
-  saveDraft(appId, nodeId, j.defId, formId, data, page);
+  saveDraft(appId, nodeId, j.defId, formId, data, page, token);
 }
 
 /** GET status: project the application onto the journey. Before the instance
@@ -266,4 +267,73 @@ export async function submitJourneyStep(token: string, appId: string, data: Cont
   await submitTask(task.id, data);
   deleteDraft(appId, task.nodeId);
   return resolveJourney(token, appId);
+}
+
+// ---- abandoned drafts: staff view + on-demand recovery email ----
+
+export interface DraftSummary {
+  appId: string;
+  token: string | null;
+  nodeId: string;
+  product: string;
+  title: string;
+  name: string;
+  email: string;
+  page: number;
+  pagesTotal: number;
+  updatedAt: string;
+  createdAt: string | null;
+  resumeUrl?: string;
+}
+
+/** Every incomplete application (a draft with no instance yet), enriched for the
+ *  "Sin completar" staff screen. `portalBase` builds a one-click resume link. */
+export function listOpenDrafts(portalBase?: string): DraftSummary[] {
+  return listDrafts().map((d) => {
+    const j = d.token ? getJourney(d.token) : undefined;
+    const step = j ? j.steps.find((s) => s.task === d.nodeId) : undefined;
+    const data = d.data as Record<string, unknown>;
+    return {
+      appId: d.appId,
+      token: d.token,
+      nodeId: d.nodeId,
+      product: j?.product ?? d.defId,
+      title: j?.title ?? d.defId,
+      name: String(data.fullName ?? data.name ?? data.legalName ?? ""),
+      email: String(data.email ?? ""),
+      page: d.page,
+      pagesTotal: step?.pages?.length ?? 1,
+      updatedAt: d.updatedAt,
+      createdAt: d.createdAt,
+      resumeUrl: j && portalBase ? `${portalBase.replace(/\/+$/, "")}/banco#${j.product}/${d.appId}` : undefined,
+    };
+  });
+}
+
+function recoveryHtml(name: string, title: string, resumeUrl: string): string {
+  const hi = name ? `Hola ${name},` : "Hola,";
+  return [
+    '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0f1b2d">',
+    '<h2 style="color:#0b3d91">Banco del Futuro</h2>',
+    `<p>${hi}</p>`,
+    `<p>Vimos que empezaste tu <b>${title}</b> y quedó a mitad de camino. Guardamos tus datos — podés retomar donde lo dejaste en un clic:</p>`,
+    `<p style="text-align:center;margin:26px 0"><a href="${resumeUrl}" style="background:#1e63d0;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700">Continuar mi solicitud</a></p>`,
+    '<p style="color:#5b6b82;font-size:13px">Si ya la completaste, ignorá este mensaje.</p>',
+    '</div>',
+  ].join("");
+}
+
+/** Send an on-demand "come back" email for one abandoned draft. */
+export async function remindDraft(appId: string, nodeId: string, portalBase: string): Promise<{ to: string; resumeUrl: string }> {
+  const draft = getDraft(appId, nodeId);
+  if (!draft) throw new Error("No encontramos ese borrador");
+  const j = draft.token ? getJourney(draft.token) : undefined;
+  const data = draft.data as Record<string, unknown>;
+  const to = String(data.email ?? "");
+  if (!to) throw new Error("El borrador todavía no tiene un email para contactar");
+  const title = j?.title ?? "solicitud";
+  const name = String(data.fullName ?? data.name ?? "");
+  const resumeUrl = `${portalBase.replace(/\/+$/, "")}/banco#${j?.product ?? "cuenta"}/${appId}`;
+  await sendEmail({ to, subject: `Seguí tu ${title} en Banco del Futuro`, html: recoveryHtml(name, title, resumeUrl) });
+  return { to, resumeUrl };
 }

@@ -35,7 +35,7 @@ export function Agents() {
   async function reload(selectId?: string) {
     const r = await api("/connectors");
     if (r.ok) {
-      const list = (r.data as Connector[]).filter((c) => c.id !== "describer");
+      const list = (r.data as Connector[]).filter((c) => c.id !== "describer" && c.id !== "mailer");
       setConnectors(list);
       setSelId((cur) => selectId ?? cur ?? (list[0]?.id ?? null));
     }

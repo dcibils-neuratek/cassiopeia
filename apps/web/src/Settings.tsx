@@ -5,16 +5,18 @@ import { AREA_SUGGESTIONS } from "./areas.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
-type TabId = "appearance" | "users" | "model" | "activity";
+type TabId = "appearance" | "users" | "model" | "mail" | "activity";
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "appearance", label: "Apariencia", icon: "🎨" },
   { id: "users", label: "Usuarios y acceso", icon: "👥" },
   { id: "model", label: "Modelo de IA", icon: "✦" },
+  { id: "mail", label: "Correo", icon: "✉️" },
   { id: "activity", label: "Actividad", icon: "🕘" },
 ];
 
 export function Settings() {
   const [describer, setDescriber] = useState<Connector>({ id: "describer", type: "ai-agent", config: { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5-20251001", apiKey: "", jsonOutput: false } });
+  const [mailer, setMailer] = useState<Connector>({ id: "mailer", type: "email", config: { provider: "resend", from: "", apiKey: "", url: "", portalBase: "" } });
   const [msg, setMsg] = useState("");
   const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string; area?: string | null }[]>([]);
   const [audit, setAudit] = useState<{ ts: string; actor: string; action: string; target: string | null }[]>([]);
@@ -25,8 +27,11 @@ export function Settings() {
 
   async function reload() {
     const r = await api("/connectors");
-    const d = (r.data as Connector[]).find((c) => c.id === "describer");
+    const list = r.data as Connector[];
+    const d = list.find((c) => c.id === "describer");
     if (d) setDescriber(d);
+    const m = list.find((c) => c.id === "mailer");
+    if (m) setMailer({ ...m, config: { provider: "resend", from: "", url: "", portalBase: "", apiKey: "", ...m.config } });
   }
   async function loadAdmin() {
     const u = await api("/auth/users"); if (u.ok) setUsers(u.data);
@@ -135,6 +140,29 @@ export function Settings() {
             <button key={id} style={{ ...S.ghost, ...(describer.config.model === id ? { border: "1px solid var(--primary)", background: "var(--primary-tint)" } : {}) }}
               onClick={() => setDescriber({ ...describer, config: { ...describer.config, model: id, baseUrl: "https://api.anthropic.com/v1" } })}>{label}</button>
           ))}
+        </div>
+      </section>
+      )}
+
+      {/* ---- Email provider ---- */}
+      {tab === "mail" && (
+      <section style={S.card}>
+        <h2 style={S.h2}>Correo saliente</h2>
+        <p style={S.hint}>Se usa para enviar recordatorios a clientes que dejaron una solicitud <b>sin completar</b>. Neutral al proveedor: <b>Resend</b> por defecto, o <b>HTTP</b> para apuntar al sistema de correo del banco. La clave se guarda <b>encriptada</b> — dejala en blanco para conservar la almacenada.</p>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
+          <div style={{ flex: "1 1 140px" }}><L>Proveedor</L>
+            <select style={S.input} value={mailer.config.provider ?? "resend"} onChange={(e) => setMailer({ ...mailer, config: { ...mailer.config, provider: e.target.value } })}>
+              <option value="resend">Resend</option>
+              <option value="http">HTTP (sistema del banco)</option>
+            </select>
+          </div>
+          <div style={{ flex: "2 1 240px" }}><L>Remitente (From)</L><input style={S.input} placeholder="Banco del Futuro &lt;noreply@tudominio.com&gt;" value={mailer.config.from ?? ""} onChange={(e) => setMailer({ ...mailer, config: { ...mailer.config, from: e.target.value } })} /></div>
+          <div style={{ flex: "1 1 160px" }}><L>Clave de API</L><input style={S.input} type="password" placeholder="se conserva si lo dejás en blanco" value={mailer.config.apiKey ?? ""} onChange={(e) => setMailer({ ...mailer, config: { ...mailer.config, apiKey: e.target.value } })} /></div>
+          {mailer.config.provider === "http" && (
+            <div style={{ flex: "2 1 240px" }}><L>URL del servicio</L><input style={S.input} placeholder="https://correo.banco.com/send" value={mailer.config.url ?? ""} onChange={(e) => setMailer({ ...mailer, config: { ...mailer.config, url: e.target.value } })} /></div>
+          )}
+          <div style={{ flex: "2 1 240px" }}><L>URL del portal <span style={S.hint}>para los links de reanudación</span></L><input style={S.input} placeholder="https://banco.com" value={mailer.config.portalBase ?? ""} onChange={(e) => setMailer({ ...mailer, config: { ...mailer.config, portalBase: e.target.value } })} /></div>
+          <button style={S.primary} onClick={() => save(mailer, "Configuración de correo guardada")}>Guardar</button>
         </div>
       </section>
       )}
