@@ -156,3 +156,37 @@ tbody tr { transition: background 0.12s ease; }
 /* sidebar nav hover (used by App) */
 .nav-item { transition: background 0.14s ease, color 0.14s ease; }
 .nav-item:hover { background: var(--surface-3); color: var(--text); }
+
+/* hover tooltip for the Designer node toolbox */
+.tool-row { position: relative; }
+.tool-row .tool-tip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.97);
+  width: 220px;
+  background: var(--text);
+  color: #fff;
+  padding: 9px 11px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 500;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.13s ease, transform 0.13s ease;
+  z-index: 60;
+  box-shadow: var(--shadow-lg);
+}
+.tool-row .tool-tip::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: var(--text);
+}
+.tool-row:hover .tool-tip { opacity: 1; transform: translateY(-50%) scale(1); }

@@ -35,15 +35,15 @@ const NODE_UI: Record<string, { color: string }> = {
   subprocess: { color: "#0d9488" },
 };
 
-// Node palette for the toolbox (Spanish labels + icons).
+// Node palette for the toolbox (Spanish labels + icons + what each node does).
 const TOOLBOX = [
-  { type: "userTask", label: "Tarea humana", icon: "👤", color: "#2563eb" },
-  { type: "serviceTask", label: "Tarea de servicio", icon: "⚙", color: "#7c3aed" },
-  { type: "gateway", label: "Decisión", icon: "⑃", color: "#d97706" },
-  { type: "timer", label: "Espera / Timer", icon: "⏱", color: "#0891b2" },
-  { type: "subprocess", label: "Subproceso", icon: "⤷", color: "#0d9488" },
-  { type: "start", label: "Inicio", icon: "▶", color: "#16a34a" },
-  { type: "end", label: "Fin", icon: "■", color: "#64748b" },
+  { type: "userTask", label: "Tarea humana", icon: "👤", color: "#2563eb", help: "Una persona completa un formulario: revisar, aprobar o cargar datos. Aparece en la Bandeja." },
+  { type: "serviceTask", label: "Tarea de servicio", icon: "⚙", color: "#7c3aed", help: "Paso automático: llama a un conector (API, agente de IA o herramienta MCP) y guarda su resultado." },
+  { type: "gateway", label: "Decisión", icon: "⑃", color: "#d97706", help: "Bifurca el flujo según una condición sobre los datos (ej. score > 700). Las condiciones van en las aristas de salida." },
+  { type: "timer", label: "Espera / Timer", icon: "⏱", color: "#0891b2", help: "Pausa el flujo un tiempo fijo o hasta una fecha del contexto, y luego lo reanuda." },
+  { type: "subprocess", label: "Subproceso", icon: "⤷", color: "#0d9488", help: "Ejecuta otro proceso completo y trae su resultado. Debe ser totalmente automático." },
+  { type: "start", label: "Inicio", icon: "▶", color: "#16a34a", help: "Punto de arranque del proceso. Solo puede haber uno." },
+  { type: "end", label: "Fin", icon: "■", color: "#64748b", help: "Marca el final de un camino del proceso." },
 ];
 const NODE_TYPE_ES: Record<string, string> = {
   start: "Inicio", end: "Fin", userTask: "Tarea humana", serviceTask: "Tarea de servicio",
@@ -51,8 +51,8 @@ const NODE_TYPE_ES: Record<string, string> = {
 };
 
 function label(n: ModelNode): string {
-  if (n.type === "start") return "Start";
-  if (n.type === "end") return "End";
+  if (n.type === "start") return "Inicio";
+  if (n.type === "end") return "Fin";
   return n.name;
 }
 
@@ -60,10 +60,10 @@ function CassNode({ data, selected }: { data: { node: ModelNode }; selected: boo
   const n = data.node;
   const ui = NODE_UI[n.type];
   const sub =
-    n.type === "userTask" ? (n.formId ? "📝 form attached" : "no form yet") :
-    n.type === "serviceTask" ? (n.connectorId ? `⚙ ${n.connectorId}` : "no connector") :
-    n.type === "timer" ? (n.untilPath ? `⏱ until ${n.untilPath}` : `⏱ ${n.delaySeconds ?? 0}s`) :
-    n.type === "subprocess" ? (n.processId ? `⤷ ${n.processId}` : "no process") : "";
+    n.type === "userTask" ? (n.formId ? "📝 formulario adjunto" : "sin formulario") :
+    n.type === "serviceTask" ? (n.connectorId ? `⚙ ${n.connectorId}` : "sin conector") :
+    n.type === "timer" ? (n.untilPath ? `⏱ hasta ${n.untilPath}` : `⏱ ${n.delaySeconds ?? 0}s`) :
+    n.type === "subprocess" ? (n.processId ? `⤷ ${n.processId}` : "sin proceso") : "";
   return (
     <div
       style={{
@@ -113,7 +113,7 @@ export function Designer({ defId }: { defId: string }) {
   const [aiInput, setAiInput] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [chat, setChat] = useState<{ role: "user" | "agent"; text: string }[]>([
-    { role: "agent", text: "Hi! Describe the workflow you want — e.g. \"a mortgage pre-approval that collects income and property value, runs an affordability check, then approves or asks for more info.\" I'll build it on the canvas, and you can keep refining." },
+    { role: "agent", text: "¡Hola! Describí el flujo que querés — por ej. \"una pre-aprobación de hipoteca que pide ingresos y valor de la propiedad, corre un análisis de capacidad de pago y después aprueba o pide más info.\" Lo construyo en el canvas y podés seguir ajustándolo." },
   ]);
   // M9 governance
   const [govOpen, setGovOpen] = useState(false);
@@ -221,9 +221,9 @@ export function Designer({ defId }: { defId: string }) {
   async function persist(publish: boolean) {
     setMsg("");
     const r = await api(`/definitions/${DEF_ID}/${publish ? "publish" : "draft"}`, { method: "POST", body: JSON.stringify(toDefinition()) });
-    if (publish && r.ok) { setErrors([]); setMsg(`Published v${r.data.version} ✓ — go to Run to try it`); }
-    else if (publish) setErrors(r.data.errors ?? ["Publish failed"]);
-    else { setErrors(r.data.errors ?? []); setMsg("Draft saved"); }
+    if (publish && r.ok) { setErrors([]); setMsg(`Publicado v${r.data.version} ✓ — abrí Ejecutar para probarlo`); }
+    else if (publish) setErrors(r.data.errors ?? ["No se pudo publicar"]);
+    else { setErrors(r.data.errors ?? []); setMsg("Borrador guardado"); }
   }
 
   async function reloadCanvas() {
@@ -249,13 +249,13 @@ export function Designer({ defId }: { defId: string }) {
   async function exportWorkflow() {
     await api(`/definitions/${DEF_ID}/draft`, { method: "POST", body: JSON.stringify(toDefinition()) });
     const r = await api(`/definitions/${DEF_ID}/export`);
-    if (!r.ok) { setMsg("Export failed"); return; }
+    if (!r.ok) { setMsg("No se pudo exportar"); return; }
     const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `${DEF_ID}.cassiopeia.json`; a.click();
     URL.revokeObjectURL(url);
-    setMsg("Exported workflow bundle (JSON)");
+    setMsg("Paquete de flujo exportado (JSON)");
   }
   async function openGov() {
     setGovMsg(""); setGovTab("versions"); setImportText("");
@@ -271,7 +271,7 @@ export function Designer({ defId }: { defId: string }) {
   async function addTrigger() {
     const r = await api(`/definitions/${DEF_ID}/triggers`, { method: "POST", body: JSON.stringify({ label: "webhook" }) });
     if (r.ok) setTriggers((await api(`/definitions/${DEF_ID}/triggers`)).data);
-    else setGovMsg(r.data?.error ?? "Creating a trigger needs admin");
+    else setGovMsg(r.data?.error ?? "Crear un disparador necesita admin");
   }
   async function delTrigger(token: string) {
     await api(`/definitions/${DEF_ID}/triggers/${token}`, { method: "DELETE" });
@@ -280,7 +280,7 @@ export function Designer({ defId }: { defId: string }) {
   async function addSchedule() {
     const r = await api(`/definitions/${DEF_ID}/schedules`, { method: "POST", body: JSON.stringify({ intervalSeconds: Math.max(1, newSchedMin) * 60, label: "recurring" }) });
     if (r.ok) setSchedules((await api(`/definitions/${DEF_ID}/schedules`)).data);
-    else setGovMsg(r.data?.error ?? "Could not create schedule");
+    else setGovMsg(r.data?.error ?? "No se pudo crear la programación");
   }
   async function delSchedule(id: string) {
     await api(`/definitions/${DEF_ID}/schedules/${id}`, { method: "DELETE" });
@@ -289,14 +289,14 @@ export function Designer({ defId }: { defId: string }) {
   async function restoreVersion(v: number) {
     await api(`/definitions/${DEF_ID}/restore/${v}`, { method: "POST" });
     await reloadCanvas();
-    setGovMsg(`Restored v${v} into the working draft`);
+    setGovMsg(`Restaurada la v${v} en el borrador de trabajo`);
   }
   async function importWorkflow() {
     let bundle: any;
-    try { bundle = JSON.parse(importText); } catch { setGovMsg("Invalid JSON"); return; }
+    try { bundle = JSON.parse(importText); } catch { setGovMsg("JSON inválido"); return; }
     const r = await api(`/definitions/import`, { method: "POST", body: JSON.stringify({ ...bundle, targetId: DEF_ID }) });
-    if (r.ok) { await reloadCanvas(); await reloadForms(); await reloadConnectors(); setGovMsg("Imported into this workflow ✓"); }
-    else setGovMsg(r.data?.error ?? "Import failed");
+    if (r.ok) { await reloadCanvas(); await reloadForms(); await reloadConnectors(); setGovMsg("Importado en este flujo ✓"); }
+    else setGovMsg(r.data?.error ?? "No se pudo importar");
   }
 
   // Publish the current design, then open the Run modal so it reflects edits.
@@ -316,7 +316,7 @@ export function Designer({ defId }: { defId: string }) {
   }
   async function saveDescriber() {
     await api(`/connectors`, { method: "POST", body: JSON.stringify({ id: "describer", type: "ai-agent", config: { ...descCfg, jsonOutput: false } }) });
-    setDescErr(""); setMsg("Description model saved");
+    setDescErr(""); setMsg("Modelo de descripción guardado");
   }
   async function generateDescription() {
     setDescBusy(true); setDescErr(""); setDescription("");
@@ -325,7 +325,7 @@ export function Designer({ defId }: { defId: string }) {
     const r = await api(`/definitions/${DEF_ID}/describe`, { method: "POST", body: JSON.stringify(descCfg) });
     setDescBusy(false);
     if (r.ok) setDescription(r.data.description);
-    else setDescErr(r.data.error ?? "Failed to generate description");
+    else setDescErr(r.data.error ?? "No se pudo generar la descripción");
   }
 
   // ---- AI workflow builder (chat) ----
@@ -345,12 +345,12 @@ export function Designer({ defId }: { defId: string }) {
       await reloadForms();
       await reloadConnectors();
       const created = (r.data.connectors ?? []) as { id: string; type: string }[];
-      const madeNote = created.length ? `\n\nCreated connector${created.length > 1 ? "s" : ""}: ${created.map((c) => `${c.id} (${c.type})`).join(", ")} — add keys in Settings.` : "";
+      const madeNote = created.length ? `\n\nSe ${created.length > 1 ? "crearon conectores" : "creó el conector"}: ${created.map((c) => `${c.id} (${c.type})`).join(", ")} — cargá las claves en Ajustes.` : "";
       const errs = (r.data.errors ?? []) as string[];
-      const note = errs.length ? `\n\n⚠ Needs a fix before publishing: ${errs.join("; ")}` : "";
-      setChat((c) => [...c, { role: "agent", text: (r.data.reply || "Done.") + madeNote + note }]);
+      const note = errs.length ? `\n\n⚠ Hay que corregir antes de publicar: ${errs.join("; ")}` : "";
+      setChat((c) => [...c, { role: "agent", text: (r.data.reply || "Listo.") + madeNote + note }]);
     } else {
-      setChat((c) => [...c, { role: "agent", text: `Sorry — ${r.data.error ?? "something went wrong."}` }]);
+      setChat((c) => [...c, { role: "agent", text: `Perdón — ${r.data.error ?? "algo salió mal."}` }]);
     }
   }
 
@@ -369,7 +369,7 @@ export function Designer({ defId }: { defId: string }) {
     setConnectors((cs) => cs.map((c) => (c.id === cid ? { ...c, config: { ...c.config, [key]: val } } : c)));
   async function saveConnector(c: Connector) {
     await api(`/connectors`, { method: "POST", body: JSON.stringify(c) });
-    setMsg(`Connector ${c.id} saved`);
+    setMsg(`Conector ${c.id} guardado`);
   }
   async function newConnectorFor(node: ModelNode, type: string) {
     const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : "ai";
@@ -386,7 +386,7 @@ export function Designer({ defId }: { defId: string }) {
   }
   async function testConnector(id: string) {
     let input: any = {};
-    try { input = JSON.parse(testInput); } catch { setTestOut("Invalid JSON"); return; }
+    try { input = JSON.parse(testInput); } catch { setTestOut("JSON inválido"); return; }
     const r = await api(`/connectors/${id}/test`, { method: "POST", body: JSON.stringify(input) });
     setTestOut(JSON.stringify(r.data, null, 2));
   }
@@ -419,11 +419,17 @@ export function Designer({ defId }: { defId: string }) {
         <div style={S.toolbox}>
           <div className="eyebrow" style={{ padding: "2px 4px 8px" }}>Nodos</div>
           {TOOLBOX.map((n) => (
-            <button key={n.type} className="nav-item" style={S.toolItem} onClick={() => addNode(n.type as any)} title={`Agregar ${n.label}`}>
+            <button key={n.type} className="nav-item tool-row" style={S.toolItem} onClick={() => addNode(n.type as any)}>
               <span style={{ ...S.toolDot, background: n.color }}>{n.icon}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{n.label}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{n.label}</span>
+              <span style={S.infoDot} aria-hidden>i</span>
+              <span className="tool-tip">
+                <b style={{ display: "block", marginBottom: 3 }}>{n.label}</b>
+                {n.help}
+              </span>
             </button>
           ))}
+          <p style={{ ...S.hint, padding: "6px 4px 0", margin: 0 }}>Pasá el mouse por la <b>i</b> para ver qué hace cada nodo.</p>
         </div>
 
         <div style={{ flex: 1, height: "calc(100vh - 210px)", minHeight: 480, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface-2)" }}>
@@ -468,61 +474,61 @@ export function Designer({ defId }: { defId: string }) {
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ flex: 1 }}>
-                      <L>Assignee</L>
-                      <input style={S.input} placeholder="unassigned"
+                      <L>Asignado a</L>
+                      <input style={S.input} placeholder="sin asignar"
                         value={(selNode as any).assignee ?? ""}
                         onChange={(e) => updateNode(selNode.id, { assignee: e.target.value || undefined } as any)} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <L>Role</L>
-                      <input style={S.input} placeholder="e.g. underwriter"
+                      <L>Rol</L>
+                      <input style={S.input} placeholder="ej. analista"
                         value={(selNode as any).candidateRole ?? ""}
                         onChange={(e) => updateNode(selNode.id, { candidateRole: e.target.value || undefined } as any)} />
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ flex: 1 }}>
-                      <L>Priority</L>
+                      <L>Prioridad</L>
                       <select style={S.input} value={(selNode as any).priority ?? "normal"}
                         onChange={(e) => updateNode(selNode.id, { priority: e.target.value === "normal" ? undefined : e.target.value } as any)}>
-                        <option value="low">low</option>
+                        <option value="low">baja</option>
                         <option value="normal">normal</option>
-                        <option value="high">high</option>
+                        <option value="high">alta</option>
                       </select>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <L>SLA (hours)</L>
-                      <input style={S.input} type="number" min={0} placeholder="none"
+                      <L>SLA (horas)</L>
+                      <input style={S.input} type="number" min={0} placeholder="ninguno"
                         value={(selNode as any).slaHours ?? ""}
                         onChange={(e) => updateNode(selNode.id, { slaHours: e.target.value.trim() === "" ? undefined : Math.max(0, Number(e.target.value) || 0) } as any)} />
                     </div>
                   </div>
-                  <p style={S.hint}>Drives the Inbox worklist: ordering, filtering, and overdue flags.</p>
+                  <p style={S.hint}>Define el orden, los filtros y los avisos de vencimiento en la Bandeja.</p>
                 </>
               )}
 
               {selNode.type === "timer" && (
                 <>
-                  <L>Wait for (seconds)</L>
+                  <L>Esperar (segundos)</L>
                   <input style={S.input} type="number" min={0} placeholder="60"
                     value={(selNode as any).delaySeconds ?? ""}
                     onChange={(e) => updateNode(selNode.id, { delaySeconds: e.target.value.trim() === "" ? undefined : Math.max(0, Number(e.target.value) || 0) } as any)} />
-                  <L>…or wait until (context date path)</L>
-                  <input style={S.input} placeholder="e.g. appointment.date"
+                  <L>…o esperar hasta (fecha en el contexto)</L>
+                  <input style={S.input} placeholder="ej. appointment.date"
                     value={(selNode as any).untilPath ?? ""}
                     onChange={(e) => updateNode(selNode.id, { untilPath: e.target.value || undefined } as any)} />
-                  <p style={S.hint}>The engine parks here; a scheduler resumes the run once the time passes. A date path wins over the fixed delay when it resolves.</p>
+                  <p style={S.hint}>El motor se detiene acá; un planificador reanuda la ejecución cuando pasa el tiempo. Si se resuelve una fecha, tiene prioridad sobre el retardo fijo.</p>
                 </>
               )}
 
               {selNode.type === "subprocess" && (
                 <>
-                  <L>Sub-process</L>
+                  <L>Subproceso</L>
                   <select style={S.input} value={(selNode as any).processId ?? ""} onChange={(e) => updateNode(selNode.id, { processId: e.target.value } as any)}>
-                    <option value="">(pick a process)</option>
+                    <option value="">(elegí un proceso)</option>
                     {allDefs.filter((d) => d.id !== DEF_ID).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
-                  <p style={S.hint}>Runs another process to completion and merges its result. It must be fully automated (no human tasks).</p>
+                  <p style={S.hint}>Ejecuta otro proceso hasta el final y combina su resultado. Debe ser totalmente automático (sin tareas humanas).</p>
                   <MultiInstanceFields node={selNode} onChange={(mi) => updateNode(selNode.id, { multiInstance: mi } as any)} />
                 </>
               )}
@@ -598,7 +604,7 @@ export function Designer({ defId }: { defId: string }) {
           <div style={S.backdrop} onClick={() => { setFormDrawerId(null); reloadForms(); }} />
           <div style={S.drawer}>
             <div style={S.drawerHead}>
-              <span style={{ fontWeight: 700 }}>Form for: {selNode && (selNode as any).name}</span>
+              <span style={{ fontWeight: 700 }}>Formulario de: {selNode && (selNode as any).name}</span>
             </div>
             <FormDesigner fixedFormId={formDrawerId} onClose={() => { setFormDrawerId(null); reloadForms(); }} />
           </div>
@@ -610,8 +616,8 @@ export function Designer({ defId }: { defId: string }) {
           <div style={S.backdrop} onClick={() => setRunOpen(false)} />
           <div style={S.modal}>
             <div style={S.modalHead}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>▶ Run: {name}</span>
-              <button style={S.ghost} onClick={() => setRunOpen(false)}>Close</button>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>▶ Ejecutar: {name}</span>
+              <button style={S.ghost} onClick={() => setRunOpen(false)}>Cerrar</button>
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
               <Portal defId={DEF_ID} autoStart />
@@ -625,14 +631,14 @@ export function Designer({ defId }: { defId: string }) {
           <div style={S.backdrop} onClick={() => setGovOpen(false)} />
           <div style={{ ...S.modal, width: "min(860px, 94vw)", height: "auto", maxHeight: "88vh" }}>
             <div style={S.modalHead}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Manage: {name}</span>
-              <button style={S.ghost} onClick={() => setGovOpen(false)}>Close</button>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Gestionar: {name}</span>
+              <button style={S.ghost} onClick={() => setGovOpen(false)}>Cerrar</button>
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                 {(["versions", "data", "automation", "import"] as const).map((t) => (
                   <button key={t} onClick={() => setGovTab(t)} style={govTab === t ? S.tabActive : S.tab}>
-                    {t === "versions" ? "Version history" : t === "data" ? "Data dictionary" : t === "automation" ? "Automation" : "Import"}
+                    {t === "versions" ? "Historial de versiones" : t === "data" ? "Diccionario de datos" : t === "automation" ? "Automatización" : "Importar"}
                   </button>
                 ))}
               </div>
@@ -641,16 +647,16 @@ export function Designer({ defId }: { defId: string }) {
               {govTab === "versions" && (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead><tr style={{ color: "#64748b", textAlign: "left" }}>
-                    <th style={S.gth}>Version</th><th style={S.gth}>Status</th><th style={S.gth}>Nodes</th><th style={S.gth}>Edges</th><th style={S.gth}></th>
+                    <th style={S.gth}>Versión</th><th style={S.gth}>Estado</th><th style={S.gth}>Nodos</th><th style={S.gth}>Aristas</th><th style={S.gth}></th>
                   </tr></thead>
                   <tbody>
                     {versions.map((v) => (
                       <tr key={v.version} style={{ borderTop: "1px solid #f1f5f9" }}>
                         <td style={S.gtd}>v{v.version}</td><td style={S.gtd}>{v.status}</td><td style={S.gtd}>{v.nodeCount}</td><td style={S.gtd}>{v.edgeCount}</td>
-                        <td style={S.gtd}><button style={S.ghost} onClick={() => restoreVersion(v.version)}>Restore to draft</button></td>
+                        <td style={S.gtd}><button style={S.ghost} onClick={() => restoreVersion(v.version)}>Restaurar al borrador</button></td>
                       </tr>
                     ))}
-                    {versions.length === 0 && <tr><td style={S.gtd} colSpan={5}>No published versions yet — publish to create v1.</td></tr>}
+                    {versions.length === 0 && <tr><td style={S.gtd} colSpan={5}>Todavía no hay versiones publicadas — publicá para crear la v1.</td></tr>}
                   </tbody>
                 </table>
               )}
@@ -660,7 +666,7 @@ export function Designer({ defId }: { defId: string }) {
                   {dataDict.warnings.map((w, i) => <div key={i} style={S.warn}>⚠ {w}</div>)}
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead><tr style={{ color: "#64748b", textAlign: "left" }}>
-                      <th style={S.gth}>Context key</th><th style={S.gth}>Produced by</th><th style={S.gth}>Consumed by</th>
+                      <th style={S.gth}>Clave de contexto</th><th style={S.gth}>Producida por</th><th style={S.gth}>Consumida por</th>
                     </tr></thead>
                     <tbody>
                       {dataDict.entries.map((e) => (
@@ -670,7 +676,7 @@ export function Designer({ defId }: { defId: string }) {
                           <td style={S.gtd}>{e.consumedBy.join(", ") || <span style={{ color: "#94a3b8" }}>—</span>}</td>
                         </tr>
                       ))}
-                      {dataDict.entries.length === 0 && <tr><td style={S.gtd} colSpan={3}>No context keys yet.</td></tr>}
+                      {dataDict.entries.length === 0 && <tr><td style={S.gtd} colSpan={3}>Todavía no hay claves de contexto.</td></tr>}
                     </tbody>
                   </table>
                 </>
@@ -678,8 +684,8 @@ export function Designer({ defId }: { defId: string }) {
 
               {govTab === "automation" && (
                 <>
-                  <div className="eyebrow" style={{ marginBottom: 4 }}>Webhook triggers</div>
-                  <p style={S.hint}>POST JSON to a trigger URL to start this workflow — the body becomes the initial context. No login needed (the token authorizes it). Creating a trigger needs admin.</p>
+                  <div className="eyebrow" style={{ marginBottom: 4 }}>Disparadores webhook</div>
+                  <p style={S.hint}>Hacé un POST de JSON a la URL del disparador para iniciar este flujo — el cuerpo se vuelve el contexto inicial. No requiere login (el token lo autoriza). Crear un disparador necesita permisos de admin.</p>
                   {triggers.map((t) => (
                     <div key={t.token} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
                       <input readOnly style={{ ...S.input, flex: 1, fontFamily: "monospace", fontSize: 11 }} value={`${location.origin}/api/hooks/${t.token}`} onFocus={(e) => e.currentTarget.select()} />
@@ -687,29 +693,29 @@ export function Designer({ defId }: { defId: string }) {
                       <button style={S.ghost} onClick={() => delTrigger(t.token)}>✕</button>
                     </div>
                   ))}
-                  <button style={S.ghost} onClick={addTrigger}>+ Webhook trigger</button>
+                  <button style={S.ghost} onClick={addTrigger}>+ Disparador webhook</button>
 
-                  <div className="eyebrow" style={{ margin: "16px 0 4px" }}>Schedules</div>
-                  <p style={S.hint}>Start this workflow automatically on a recurring interval.</p>
+                  <div className="eyebrow" style={{ margin: "16px 0 4px" }}>Programaciones</div>
+                  <p style={S.hint}>Iniciá este flujo automáticamente cada cierto intervalo.</p>
                   {schedules.map((s) => (
                     <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, fontSize: 13 }}>
-                      <span>Every <b>{Math.round(s.intervalSeconds / 60)}</b> min {s.label ? `· ${s.label}` : ""}</span>
-                      <span style={S.hint}>next {new Date(s.nextRun).toLocaleTimeString()}</span>
+                      <span>Cada <b>{Math.round(s.intervalSeconds / 60)}</b> min {s.label ? `· ${s.label}` : ""}</span>
+                      <span style={S.hint}>próxima {new Date(s.nextRun).toLocaleTimeString()}</span>
                       <button style={S.ghost} onClick={() => delSchedule(s.id)}>✕</button>
                     </div>
                   ))}
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-                    Every <input type="number" min={1} style={{ ...S.input, width: 80 }} value={newSchedMin} onChange={(e) => setNewSchedMin(Number(e.target.value) || 1)} /> minutes
-                    <button style={S.ghost} onClick={addSchedule}>+ Schedule</button>
+                    Cada <input type="number" min={1} style={{ ...S.input, width: 80 }} value={newSchedMin} onChange={(e) => setNewSchedMin(Number(e.target.value) || 1)} /> minutos
+                    <button style={S.ghost} onClick={addSchedule}>+ Programación</button>
                   </div>
                 </>
               )}
 
               {govTab === "import" && (
                 <>
-                  <p style={S.hint}>Paste a Cassiopeia workflow bundle (from Export). It imports into <b>{DEF_ID}</b> as a draft; existing connectors keep their keys.</p>
+                  <p style={S.hint}>Pegá un paquete de flujo de Cassiopeia (desde Exportar). Se importa en <b>{DEF_ID}</b> como borrador; los conectores existentes conservan sus claves.</p>
                   <textarea style={{ ...S.input, height: 220, fontFamily: "monospace" }} placeholder='{"cassiopeia":"workflow-bundle", ...}' value={importText} onChange={(e) => setImportText(e.target.value)} />
-                  <button style={S.primary} onClick={importWorkflow}>Import bundle</button>
+                  <button style={S.primary} onClick={importWorkflow}>Importar paquete</button>
                 </>
               )}
             </div>
@@ -720,8 +726,8 @@ export function Designer({ defId }: { defId: string }) {
       {aiOpen && (
         <div style={S.aiDrawer}>
           <div style={S.drawerHead}>
-            <span style={{ fontWeight: 700 }}>✦ Build with AI</span>
-            <button style={S.ghost} onClick={() => setAiOpen(false)}>Close</button>
+            <span style={{ fontWeight: 700 }}>✦ Construir con IA</span>
+            <button style={S.ghost} onClick={() => setAiOpen(false)}>Cerrar</button>
           </div>
           <div style={S.chatScroll}>
             {chat.map((m, i) => (
@@ -729,17 +735,17 @@ export function Designer({ defId }: { defId: string }) {
                 <div style={m.role === "user" ? S.bubbleUser : S.bubbleAgent}>{m.text}</div>
               </div>
             ))}
-            {aiBusy && <div style={{ ...S.bubbleAgent, color: "#64748b" }}>Designing the workflow…</div>}
+            {aiBusy && <div style={{ ...S.bubbleAgent, color: "#64748b" }}>Diseñando el flujo…</div>}
           </div>
           <div style={S.chatInputRow}>
             <textarea
               style={S.chatInput}
-              placeholder="Describe or change the workflow…"
+              placeholder="Describí o modificá el flujo…"
               value={aiInput}
               onChange={(e) => setAiInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }}
             />
-            <button style={S.primary} disabled={aiBusy} onClick={sendAi}>Send</button>
+            <button style={S.primary} disabled={aiBusy} onClick={sendAi}>Enviar</button>
           </div>
         </div>
       )}
@@ -749,31 +755,31 @@ export function Designer({ defId }: { defId: string }) {
           <div style={S.backdrop} onClick={() => setDescOpen(false)} />
           <div style={{ ...S.modal, width: "min(760px, 94vw)", height: "auto", maxHeight: "88vh" }}>
             <div style={S.modalHead}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>✦ Process description: {name}</span>
-              <button style={S.ghost} onClick={() => setDescOpen(false)}>Close</button>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>✦ Descripción del proceso: {name}</span>
+              <button style={S.ghost} onClick={() => setDescOpen(false)}>Cerrar</button>
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
               <div style={S.descSettings}>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
                   <div style={{ flex: "1 1 160px" }}>
-                    <L>Model</L>
+                    <L>Modelo</L>
                     <input style={S.input} value={descCfg.model} onChange={(e) => setDescCfg({ ...descCfg, model: e.target.value })} />
                   </div>
                   <div style={{ flex: "2 1 240px" }}>
-                    <L>Base URL <span style={S.hint}>OpenAI-compatible</span></L>
+                    <L>URL base <span style={S.hint}>compatible con OpenAI</span></L>
                     <input style={S.input} value={descCfg.baseUrl} onChange={(e) => setDescCfg({ ...descCfg, baseUrl: e.target.value })} />
                   </div>
                   <div style={{ flex: "1 1 160px" }}>
-                    <L>API key</L>
+                    <L>Clave de API</L>
                     <input style={S.input} type="password" value={descCfg.apiKey} onChange={(e) => setDescCfg({ ...descCfg, apiKey: e.target.value })} />
                   </div>
-                  <button style={S.ghost} onClick={saveDescriber}>Save</button>
+                  <button style={S.ghost} onClick={saveDescriber}>Guardar</button>
                 </div>
-                <p style={{ ...S.hint, marginTop: 8 }}>Defaults to Claude Haiku — change the model/URL/key for any OpenAI-compatible provider.</p>
+                <p style={{ ...S.hint, marginTop: 8 }}>Por defecto usa Claude Haiku — cambiá el modelo/URL/clave para cualquier proveedor compatible con OpenAI.</p>
               </div>
 
               <button style={{ ...S.primary, marginTop: 14 }} disabled={descBusy} onClick={generateDescription}>
-                {descBusy ? "Reading the flow…" : "Generate description"}
+                {descBusy ? "Leyendo el flujo…" : "Generar descripción"}
               </button>
 
               {descErr && <div style={{ ...S.errBar, marginTop: 12 }}>{descErr}</div>}
@@ -808,48 +814,48 @@ function ServiceInspector({
   const num = (v: string): any => (v.trim() === "" ? undefined : Math.max(0, Number(v) || 0));
   return (
     <div>
-      <L>Connector</L>
+      <L>Conector</L>
       <select style={S.input} value={node.connectorId ?? ""} onChange={(e) => onPick(e.target.value)}>
-        <option value="">(none)</option>
+        <option value="">(ninguno)</option>
         {connectors.map((x) => <option key={x.id} value={x.id}>{x.id} ({x.type})</option>)}
       </select>
       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-        <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ AI agent</button>
+        <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ Agente IA</button>
         <button style={S.ghost} onClick={() => onNew("maverick-agent")}>+ Maverick</button>
         <button style={S.ghost} onClick={() => onNew("mcp")}>+ MCP</button>
       </div>
 
       {c && c.type === "mcp" && (
         <>
-          <L>MCP server URL</L>
+          <L>URL del servidor MCP</L>
           <input style={S.input} value={c.config.url ?? ""} onChange={(e) => setCfg(c.id, "url", e.target.value)} />
-          <L>API key <span style={S.hint}>optional</span></L>
+          <L>Clave de API <span style={S.hint}>opcional</span></L>
           <input style={S.input} type="password" value={c.config.apiKey ?? ""} onChange={(e) => setCfg(c.id, "apiKey", e.target.value)} />
-          <L>Tool</L>
+          <L>Herramienta</L>
           <McpToolPicker url={c.config.url} apiKey={c.config.apiKey} value={c.config.toolName} onChange={(v) => setCfg(c.id, "toolName", v)} />
         </>
       )}
 
       {c && c.type === "maverick-agent" && (
         <>
-          <L>Maverick base URL</L>
+          <L>URL base de Maverick</L>
           <input style={S.input} value={c.config.baseUrl ?? ""} onChange={(e) => setCfg(c.id, "baseUrl", e.target.value)} />
-          <L>API key</L>
+          <L>Clave de API</L>
           <input style={S.input} type="password" value={c.config.apiKey ?? ""} onChange={(e) => setCfg(c.id, "apiKey", e.target.value)} />
-          <L>Agent ID</L>
+          <L>ID del agente</L>
           <input style={S.input} value={c.config.agentId ?? ""} onChange={(e) => setCfg(c.id, "agentId", e.target.value)} />
         </>
       )}
 
       {c && c.type === "ai-agent" && (
         <>
-          <L>Base URL <span style={S.hint}>OpenAI-compatible</span></L>
+          <L>URL base <span style={S.hint}>compatible con OpenAI</span></L>
           <input style={S.input} value={c.config.baseUrl ?? ""} onChange={(e) => setCfg(c.id, "baseUrl", e.target.value)} />
-          <L>API key</L>
+          <L>Clave de API</L>
           <input style={S.input} type="password" value={c.config.apiKey ?? ""} onChange={(e) => setCfg(c.id, "apiKey", e.target.value)} />
-          <L>Model</L>
+          <L>Modelo</L>
           <input style={S.input} value={c.config.model ?? ""} onChange={(e) => setCfg(c.id, "model", e.target.value)} />
-          <L>Instructions</L>
+          <L>Instrucciones</L>
           <textarea style={{ ...S.input, height: 70 }} value={c.config.instructions ?? ""} onChange={(e) => setCfg(c.id, "instructions", e.target.value)} />
         </>
       )}
@@ -859,48 +865,48 @@ function ServiceInspector({
           <input style={S.input} value={c.config.url ?? ""} onChange={(e) => setCfg(c.id, "url", e.target.value)} />
         </>
       )}
-      {c && c.type.startsWith("mock") && <p style={S.hint}>Built-in mock connector — no config.</p>}
+      {c && c.type.startsWith("mock") && <p style={S.hint}>Conector de prueba incorporado — sin configuración.</p>}
 
       {c && (
         <>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            {!c.type.startsWith("mock") && <button style={S.ghost} onClick={() => onSave(c)}>Save connector</button>}
+            {!c.type.startsWith("mock") && <button style={S.ghost} onClick={() => onSave(c)}>Guardar conector</button>}
           </div>
           <div style={{ marginTop: 12, borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
-            <L>Test input (JSON)</L>
+            <L>Datos de prueba (JSON)</L>
             <textarea style={{ ...S.input, height: 48, fontFamily: "monospace" }} value={testInput} onChange={(e) => setTestInput(e.target.value)} />
-            <button style={S.ghost} onClick={() => onTest(c.id)}>Run test</button>
+            <button style={S.ghost} onClick={() => onTest(c.id)}>Probar</button>
             {testOut && <pre style={S.pre}>{testOut}</pre>}
           </div>
         </>
       )}
 
       <div style={{ marginTop: 12, borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
-        <L>Reliability</L>
-        <p style={S.hint}>Retry a flaky connector, cap how long it may run, and choose where a final failure goes.</p>
+        <L>Resiliencia</L>
+        <p style={S.hint}>Reintentá un conector inestable, limitá cuánto puede tardar y elegí a dónde va una falla definitiva.</p>
         <div style={{ display: "flex", gap: 8 }}>
           <div style={{ flex: 1 }}>
-            <L>Retries</L>
+            <L>Reintentos</L>
             <input style={S.input} type="number" min={0} value={node.retries ?? ""} placeholder="0"
               onChange={(e) => onPatch({ retries: num(e.target.value) } as any)} />
           </div>
           <div style={{ flex: 1 }}>
-            <L>Backoff (ms)</L>
+            <L>Espera (ms)</L>
             <input style={S.input} type="number" min={0} value={node.retryDelayMs ?? ""} placeholder="500"
               onChange={(e) => onPatch({ retryDelayMs: num(e.target.value) } as any)} />
           </div>
           <div style={{ flex: 1 }}>
-            <L>Timeout (ms)</L>
-            <input style={S.input} type="number" min={0} value={node.timeoutMs ?? ""} placeholder="none"
+            <L>Tiempo límite (ms)</L>
+            <input style={S.input} type="number" min={0} value={node.timeoutMs ?? ""} placeholder="ninguno"
               onChange={(e) => onPatch({ timeoutMs: num(e.target.value) } as any)} />
           </div>
         </div>
-        <L>On failure</L>
+        <L>Si falla</L>
         <select style={S.input} value={node.onErrorEdgeId ?? ""} onChange={(e) => onPatch({ onErrorEdgeId: e.target.value || undefined } as any)}>
-          <option value="">Fail the instance</option>
-          {outEdges.map((e) => <option key={e.id} value={e.id}>Route to → {e.toName}</option>)}
+          <option value="">Fallar la instancia</option>
+          {outEdges.map((e) => <option key={e.id} value={e.id}>Ir hacia → {e.toName}</option>)}
         </select>
-        {node.onErrorEdgeId && <p style={S.hint}>On error, the run continues down this edge with the failure in <code>error</code>.</p>}
+        {node.onErrorEdgeId && <p style={S.hint}>Ante un error, la ejecución continúa por esta arista con la falla en <code>error</code>.</p>}
       </div>
 
       <MultiInstanceFields node={node} onChange={(mi) => onPatch({ multiInstance: mi } as any)} />
@@ -914,15 +920,15 @@ function MultiInstanceFields({ node, onChange }: { node: any; onChange: (mi: any
     <div style={{ marginTop: 10, borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
       <label style={S.check}>
         <input type="checkbox" checked={!!mi} onChange={(e) => onChange(e.target.checked ? { collectionPath: "items", itemKey: "item", resultPath: "results" } : undefined)} />
-        Fan-out: run once per item of a collection
+        Fan-out: ejecutar una vez por cada ítem de una colección
       </label>
       {mi && (
         <>
-          <L>Collection path</L>
-          <input style={S.input} value={mi.collectionPath ?? ""} placeholder="e.g. applicants" onChange={(e) => onChange({ ...mi, collectionPath: e.target.value })} />
+          <L>Ruta de la colección</L>
+          <input style={S.input} value={mi.collectionPath ?? ""} placeholder="ej. applicants" onChange={(e) => onChange({ ...mi, collectionPath: e.target.value })} />
           <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ flex: 1 }}><L>Item key</L><input style={S.input} value={mi.itemKey ?? ""} placeholder="item" onChange={(e) => onChange({ ...mi, itemKey: e.target.value })} /></div>
-            <div style={{ flex: 1 }}><L>Result path</L><input style={S.input} value={mi.resultPath ?? ""} placeholder="results" onChange={(e) => onChange({ ...mi, resultPath: e.target.value })} /></div>
+            <div style={{ flex: 1 }}><L>Clave del ítem</L><input style={S.input} value={mi.itemKey ?? ""} placeholder="item" onChange={(e) => onChange({ ...mi, itemKey: e.target.value })} /></div>
+            <div style={{ flex: 1 }}><L>Ruta de resultados</L><input style={S.input} value={mi.resultPath ?? ""} placeholder="results" onChange={(e) => onChange({ ...mi, resultPath: e.target.value })} /></div>
           </div>
         </>
       )}
@@ -957,6 +963,7 @@ const S: Record<string, React.CSSProperties> = {
   toolbox: { width: 168, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 12, padding: 8, background: "var(--surface)", display: "flex", flexDirection: "column", gap: 3, height: "fit-content" },
   toolItem: { display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", border: 0, background: "transparent", borderRadius: 9, padding: "8px 8px", cursor: "pointer", color: "var(--text)" },
   toolDot: { width: 26, height: 26, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 13, flexShrink: 0 },
+  infoDot: { width: 16, height: 16, borderRadius: 999, border: "1px solid var(--border-strong)", color: "var(--text-faint)", fontSize: 10, fontWeight: 800, fontStyle: "italic", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "Georgia, serif" },
   h3: { margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b" },
   steps: { margin: 0, paddingLeft: 18, lineHeight: 1.9, fontSize: 13, color: "#334155" },
   hint: { fontSize: 12, color: "#64748b" },

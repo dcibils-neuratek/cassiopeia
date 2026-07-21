@@ -722,15 +722,27 @@ app.get("/tasks", async () => {
       const inst = getInstance(t.instanceId);
       let processName = inst.defId;
       let nodeName = t.nodeId;
+      let route: { from: string[]; to: string[] } = { from: [], to: [] };
       try {
         const def = getDefinition(inst.defId, inst.defVersion);
         processName = def.name;
+        const nameOf = (nid: string): string => {
+          const n = def.nodes.find((x) => x.id === nid);
+          if (!n) return nid;
+          if (n.type === "start") return "Inicio";
+          if (n.type === "end") return "Fin";
+          return "name" in n && n.name ? n.name : nid;
+        };
         const node = def.nodes.find((n) => n.id === t.nodeId);
         if (node && "name" in node && node.name) nodeName = node.name;
+        route = {
+          from: def.edges.filter((e) => e.to === t.nodeId).map((e) => nameOf(e.from)),
+          to: def.edges.filter((e) => e.from === t.nodeId).map((e) => nameOf(e.to)),
+        };
       } catch { /* definition gone */ }
       let formTitle: string | null = null;
       if (t.formId) { try { formTitle = getForm(t.formId).title; } catch { /* form gone */ } }
-      return { ...t, defId: inst.defId, processName, nodeName, formTitle, context: inst.context };
+      return { ...t, defId: inst.defId, processName, nodeName, formTitle, route, context: inst.context };
     })
     .sort((a, b) => {
       const pr = (rank[a.priority ?? "normal"] ?? 1) - (rank[b.priority ?? "normal"] ?? 1);

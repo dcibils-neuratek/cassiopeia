@@ -98,11 +98,11 @@ export function App() {
     <div style={S.shell}>
       <aside style={S.sidebar}>
         <div style={S.brand}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
             <div style={S.logoMark}>✦</div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0.2, color: "var(--text)" }}>Cassiopeia</div>
-              <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 1, letterSpacing: 0.2 }}>process &amp; form studio</div>
+              <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: -0.3, color: "var(--text)", lineHeight: 1.05 }}>Cassiopeia</div>
+              <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2, letterSpacing: 0.2 }}>process &amp; form studio</div>
             </div>
           </div>
         </div>
@@ -259,7 +259,7 @@ const S: Record<string, React.CSSProperties> = {
   shell: { display: "flex", minHeight: "100vh", alignItems: "stretch" },
   sidebar: { width: 246, flexShrink: 0, background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", paddingTop: 22, paddingBottom: 16, position: "sticky", top: 0, height: "100vh" },
   brand: { padding: "0 22px 22px" },
-  logoMark: { width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--on-primary)", fontSize: 16, background: "linear-gradient(135deg, var(--primary), var(--primary-strong))", boxShadow: "var(--shadow-md)", flexShrink: 0 },
+  logoMark: { width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--on-primary)", fontSize: 19, background: "linear-gradient(135deg, var(--primary), var(--primary-strong))", boxShadow: "var(--shadow-md)", flexShrink: 0 },
   poweredBy: { padding: "12px 22px 0", fontSize: 10, letterSpacing: 0.6, color: "var(--text-faint)", fontWeight: 700 },
   userRow: { display: "flex", alignItems: "center", gap: 10, margin: "12px 14px 0", padding: "8px 10px", background: "var(--surface-3)", borderRadius: 10 },
   avatar: { width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg, var(--primary), var(--primary-strong))", color: "var(--on-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 },
