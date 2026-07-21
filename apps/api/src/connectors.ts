@@ -392,5 +392,25 @@ export async function runConnector(
   const c = getConnector(connectorId);
   const adapter = adapters[c.type];
   if (!adapter) throw new Error(`No adapter for connector type '${c.type}'`);
-  return adapter(input, c.config);
+  return adapter(input, withPlatformKey(connectorId, c.type, c.config));
+}
+
+/**
+ * Platform-key fallback, resolved at run time: an `ai-agent` with no key of its
+ * own borrows the platform LLM key from the `describer` connector (Settings →
+ * Modelo de IA). A key set on the agent itself always wins (per-agent override),
+ * and changing the platform key takes effect immediately — no restart, nothing
+ * baked into each agent.
+ */
+function withPlatformKey(
+  connectorId: string,
+  type: string,
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  if (type !== "ai-agent" || config.apiKey || connectorId === "describer") return config;
+  try {
+    const platformKey = getConnector("describer").config.apiKey;
+    if (platformKey) return { ...config, apiKey: platformKey };
+  } catch { /* describer not installed */ }
+  return config;
 }

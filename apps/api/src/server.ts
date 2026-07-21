@@ -103,19 +103,9 @@ try {
   ensureStaff("officer", "Banco del Futuro — Mesa de Crédito", "creditos");
   ensureStaff("cumplimiento", "Banco del Futuro — Cumplimiento", "cumplimiento");
 
-  // AI agents are installed key-less; give them the platform key (from Settings →
-  // Modelo de IA) if they don't have their own, so the demo works turnkey.
-  try {
-    const platformKey = getConnector("describer").config.apiKey as string | undefined;
-    if (platformKey) {
-      for (const id of ["credit-agent", "kyc-agent", "mortgage-agent", "fraud-agent"]) {
-        try {
-          const c = getConnector(id);
-          if (!c.config.apiKey) saveConnector({ ...c, config: { ...c.config, apiKey: platformKey } });
-        } catch { /* agent not installed */ }
-      }
-    }
-  } catch { /* no describer */ }
+  // AI agents are installed key-less and borrow the platform key at run time via
+  // withPlatformKey() in connectors.ts (Settings → Modelo de IA). No backfill: a
+  // per-agent key is an explicit override, and platform-key changes apply live.
 } catch (err) { app.log.warn(`demo seed skipped: ${(err as Error).message}`); }
 
 startScheduler(); // resume timer nodes whose wake time has passed
