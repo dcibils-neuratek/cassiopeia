@@ -5,18 +5,21 @@ import { AREA_SUGGESTIONS } from "./areas.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
-type TabId = "appearance" | "users" | "model" | "mail" | "activity";
+type TabId = "appearance" | "users" | "model" | "mail" | "automation" | "activity";
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "appearance", label: "Apariencia", icon: "🎨" },
   { id: "users", label: "Usuarios y acceso", icon: "👥" },
   { id: "model", label: "Modelo de IA", icon: "✦" },
   { id: "mail", label: "Correo", icon: "✉️" },
+  { id: "automation", label: "Automatizaciones", icon: "⏱️" },
   { id: "activity", label: "Actividad", icon: "🕘" },
 ];
 
 export function Settings() {
   const [describer, setDescriber] = useState<Connector>({ id: "describer", type: "ai-agent", config: { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5-20251001", apiKey: "", jsonOutput: false } });
   const [mailer, setMailer] = useState<Connector>({ id: "mailer", type: "email", config: { provider: "resend", from: "", apiKey: "", url: "", portalBase: "" } });
+  const [automation, setAutomation] = useState<Connector>({ id: "automation", type: "settings", config: { draftsEnabled: false, remindAfterHours: 24, secondRemindAfterHours: 72, purgeAfterHours: 336 } });
+  const [sweepMsg, setSweepMsg] = useState("");
   const [msg, setMsg] = useState("");
   const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string; area?: string | null }[]>([]);
   const [audit, setAudit] = useState<{ ts: string; actor: string; action: string; target: string | null }[]>([]);
@@ -32,6 +35,14 @@ export function Settings() {
     if (d) setDescriber(d);
     const m = list.find((c) => c.id === "mailer");
     if (m) setMailer({ ...m, config: { provider: "resend", from: "", url: "", portalBase: "", apiKey: "", ...m.config } });
+    const au = list.find((c) => c.id === "automation");
+    if (au) setAutomation({ ...au, config: { draftsEnabled: false, remindAfterHours: 24, secondRemindAfterHours: 72, purgeAfterHours: 336, ...au.config } });
+  }
+
+  async function runSweep() {
+    setSweepMsg("Ejecutando…");
+    const r = await api("/drafts/sweep", { method: "POST" });
+    setSweepMsg(r.ok ? `Barrido listo: ${r.data.reminded} recordatorio(s) enviado(s), ${r.data.purged} descartado(s).` : (r.data?.error ?? "No se pudo ejecutar"));
   }
   async function loadAdmin() {
     const u = await api("/auth/users"); if (u.ok) setUsers(u.data);
@@ -164,6 +175,32 @@ export function Settings() {
           )}
           <div style={{ flex: "2 1 240px" }}><L>URL del portal <span style={S.hint}>para los links de reanudación</span></L><input style={S.input} placeholder="https://banco.com" value={mailer.config.portalBase ?? ""} onChange={(e) => setMailer({ ...mailer, config: { ...mailer.config, portalBase: e.target.value } })} /></div>
           <button style={S.primary} onClick={() => save(mailer, "Configuración de correo guardada")}>Guardar</button>
+        </div>
+      </section>
+      )}
+
+      {/* ---- Automations ---- */}
+      {tab === "automation" && (
+      <section style={S.card}>
+        <h2 style={S.h2}>Automatizaciones</h2>
+        <p style={S.hint}>Tareas que corren solas en segundo plano. Hoy: recuperar clientes que dejaron una solicitud <b>sin completar</b>. Requiere tener el <b>Correo</b> configurado.</p>
+
+        <div style={{ marginTop: 14, padding: 14, border: "1px solid var(--border)", borderRadius: 12 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!automation.config.draftsEnabled} onChange={(e) => setAutomation({ ...automation, config: { ...automation.config, draftsEnabled: e.target.checked } })} />
+            <span style={{ fontWeight: 700, fontSize: 14 }}>Recuperación de solicitudes sin completar</span>
+          </label>
+          <p style={S.hint}>Cuando un cliente deja una solicitud inactiva, le mandamos un recordatorio con el link para retomarla. Si sigue sin volver, se descarta.</p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 10, opacity: automation.config.draftsEnabled ? 1 : 0.5 }}>
+            <div style={{ flex: "1 1 150px" }}><L>Recordar tras (horas)</L><input style={S.input} type="number" min={0} value={automation.config.remindAfterHours ?? 24} onChange={(e) => setAutomation({ ...automation, config: { ...automation.config, remindAfterHours: Number(e.target.value) } })} /></div>
+            <div style={{ flex: "1 1 150px" }}><L>2º recordatorio tras (horas) <span style={S.hint}>0 = no</span></L><input style={S.input} type="number" min={0} value={automation.config.secondRemindAfterHours ?? 72} onChange={(e) => setAutomation({ ...automation, config: { ...automation.config, secondRemindAfterHours: Number(e.target.value) } })} /></div>
+            <div style={{ flex: "1 1 150px" }}><L>Descartar tras (horas) <span style={S.hint}>0 = nunca</span></L><input style={S.input} type="number" min={0} value={automation.config.purgeAfterHours ?? 336} onChange={(e) => setAutomation({ ...automation, config: { ...automation.config, purgeAfterHours: Number(e.target.value) } })} /></div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
+            <button style={S.primary} onClick={() => save({ ...automation, type: "settings" }, "Automatización guardada")}>Guardar</button>
+            <button style={S.ghost} onClick={runSweep}>Ejecutar ahora</button>
+            {sweepMsg && <span style={S.hint}>{sweepMsg}</span>}
+          </div>
         </div>
       </section>
       )}

@@ -206,6 +206,8 @@ function migrate(): void {
   addColumnIfMissing("users", "area", "area TEXT");
   addColumnIfMissing("form_drafts", "token", "token TEXT");
   addColumnIfMissing("form_drafts", "created_at", "created_at TEXT");
+  addColumnIfMissing("form_drafts", "reminders_sent", "reminders_sent INTEGER DEFAULT 0");
+  addColumnIfMissing("form_drafts", "last_reminder_at", "last_reminder_at TEXT");
 }
 
 // ---- definitions ----
@@ -887,6 +889,8 @@ export interface FormDraft {
   page: number;
   updatedAt: string;
   createdAt: string | null;
+  remindersSent: number;
+  lastReminderAt: string | null;
 }
 
 function rowToDraft(r: Record<string, unknown>): FormDraft {
@@ -900,7 +904,16 @@ function rowToDraft(r: Record<string, unknown>): FormDraft {
     page: (r.page as number) ?? 0,
     updatedAt: r.updated_at as string,
     createdAt: (r.created_at as string) ?? null,
+    remindersSent: (r.reminders_sent as number) ?? 0,
+    lastReminderAt: (r.last_reminder_at as string) ?? null,
   };
+}
+
+/** Record that a recovery reminder was sent (does NOT touch updated_at, so the
+ *  idle clock keeps measuring time since the customer's last real activity). */
+export function markDraftReminded(appId: string, nodeId: string, count: number): void {
+  db.prepare(`UPDATE form_drafts SET reminders_sent = ?, last_reminder_at = ? WHERE app_id = ? AND node_id = ?`)
+    .run(count, new Date().toISOString(), appId, nodeId);
 }
 
 /** Upsert the partial input for one open customer task. */

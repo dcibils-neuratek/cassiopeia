@@ -73,6 +73,7 @@ import {
   listOpenDrafts, remindDraft,
 } from "./public-apply.js";
 import { getJourney } from "./journeys.js";
+import { sweepDrafts } from "./automation.js";
 
 const app = Fastify({ logger: true, bodyLimit: 20 * 1024 * 1024 }); // allow base64 file uploads
 await app.register(cors, { origin: true });
@@ -114,6 +115,11 @@ try {
 } catch (err) { app.log.warn(`demo seed skipped: ${(err as Error).message}`); }
 
 startScheduler(); // resume timer nodes whose wake time has passed
+
+// Background automations (TTL recovery of abandoned drafts). Slow cadence; the
+// sweep itself no-ops unless enabled in Settings → Automatizaciones.
+const draftSweep = setInterval(() => { sweepDrafts().catch(() => { /* retried next pass */ }); }, 60_000);
+if (typeof draftSweep.unref === "function") draftSweep.unref();
 
 // ---- M11 auth: authenticate every non-public request ----
 function isPublic(method: string, url: string): boolean {
@@ -286,6 +292,11 @@ function portalBaseOf(req: { protocol?: string; headers: Record<string, unknown>
 }
 
 app.get("/drafts", async (req) => listOpenDrafts(portalBaseOf(req)));
+// Run the TTL automation once now (Settings → Automatizaciones "Ejecutar ahora").
+app.post("/drafts/sweep", async (_req, reply) => {
+  try { return { ok: true, ...(await sweepDrafts()) }; }
+  catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
 app.post("/drafts/remind", async (req, reply) => {
   const { appId, nodeId } = (req.body ?? {}) as { appId?: string; nodeId?: string };
   if (!appId || !nodeId) return reply.code(400).send({ ok: false, error: "Falta appId o nodeId" });
