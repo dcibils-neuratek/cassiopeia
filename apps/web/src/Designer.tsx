@@ -849,16 +849,17 @@ function ServiceInspector({
   const num = (v: string): any => (v.trim() === "" ? undefined : Math.max(0, Number(v) || 0));
   return (
     <div>
-      <L>Conector</L>
+      <L>Agente <span style={S.hint}>reutilizable</span></L>
       <select style={S.input} value={node.connectorId ?? ""} onChange={(e) => onPick(e.target.value)}>
         <option value="">(ninguno)</option>
-        {connectors.map((x) => <option key={x.id} value={x.id}>{x.id} ({x.type})</option>)}
+        {connectors.filter((x) => x.id !== "describer").map((x) => <option key={x.id} value={x.id}>{x.id} ({x.type})</option>)}
       </select>
       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-        <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ Agente IA</button>
+        <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ Nuevo agente IA</button>
         <button style={S.ghost} onClick={() => onNew("maverick-agent")}>+ Maverick</button>
         <button style={S.ghost} onClick={() => onNew("mcp")}>+ MCP</button>
       </div>
+      <p style={S.hint}>Elegí un agente ya armado o creá uno. Gestioná todos los agentes desde el menú <b>Agentes</b>.</p>
 
       {c && c.type === "mcp" && (
         <>

@@ -22,6 +22,8 @@ import {
   createSchedule,
   createTrigger,
   deleteDefinition,
+  deleteForm,
+  deleteConnector,
   deleteSchedule,
   deleteTrigger,
   ensurePublicTrigger,
@@ -478,10 +480,26 @@ app.post("/mcp/tools", async (req, reply) => {
 });
 
 app.post("/connectors", async (req, reply) => {
-  if (!requireCap(req, reply, "admin")) return;
+  if (!requireCap(req, reply, "build")) return;
   const body = req.body as { id: string; type: string; config: Record<string, unknown> };
   saveConnector({ id: body.id, type: body.type, config: body.config ?? {} });
   addAudit(actor(req).username, "connector.save", body.id);
+  return { ok: true };
+});
+
+// Delete an agent/connector — blocked (409) if a flow node or another agent's
+// tools still reference it.
+app.delete("/connectors/:id", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const { id } = req.params as { id: string };
+  if (id === "describer") return reply.code(400).send({ ok: false, error: "El modelo de la plataforma se configura en Ajustes." });
+  const usedBy = nodesUsing((n) => n.connectorId === id);
+  for (const c of listConnectors()) {
+    if (((c.config.tools as { connector?: string }[]) ?? []).some((t) => t.connector === id)) usedBy.push(`agente ${c.id}`);
+  }
+  if (usedBy.length) return reply.code(409).send({ ok: false, error: "agent in use", usedBy });
+  deleteConnector(id);
+  addAudit(actor(req).username, "connector.delete", id);
   return { ok: true };
 });
 
@@ -612,11 +630,48 @@ app.get("/forms/:id", async (req) => {
 });
 
 // Save a form (MVP: overwrite at version 1; the portal resolves the latest).
-app.post("/forms/:id", async (req) => {
+app.post("/forms/:id", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   const body = req.body as FormDefinition;
   const form: FormDefinition = { ...body, id, version: 1 };
   saveForm(form);
+  return { ok: true };
+});
+
+// Which published/draft flows reference a given form or agent (connector).
+function nodesUsing(pred: (n: Record<string, unknown>) => boolean): string[] {
+  const used: string[] = [];
+  for (const d of listDefinitions()) {
+    try {
+      const def = getEditableDefinition(d.id);
+      if (def?.nodes.some((n) => pred(n as unknown as Record<string, unknown>))) used.push(def.name);
+    } catch { /* ignore */ }
+  }
+  return used;
+}
+
+// Duplicate a form into a new id (for reuse as a starting point).
+app.post("/forms/:id/duplicate", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const { id } = req.params as { id: string };
+  let src: FormDefinition;
+  try { src = getForm(id); } catch { return reply.code(404).send({ ok: false, error: "form not found" }); }
+  const newId = `form_${randomUUID().slice(0, 6)}`;
+  const copy: FormDefinition = { ...src, id: newId, version: 1, title: `${src.title} (copia)` };
+  saveForm(copy);
+  addAudit(actor(req).username, "form.duplicate", newId);
+  return { ok: true, id: newId };
+});
+
+// Delete a form — blocked (409) if any flow still references it.
+app.delete("/forms/:id", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const { id } = req.params as { id: string };
+  const usedBy = nodesUsing((n) => n.formId === id);
+  if (usedBy.length) return reply.code(409).send({ ok: false, error: "form in use", usedBy });
+  deleteForm(id);
+  addAudit(actor(req).username, "form.delete", id);
   return { ok: true };
 });
 

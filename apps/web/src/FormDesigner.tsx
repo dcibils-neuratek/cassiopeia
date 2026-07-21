@@ -20,11 +20,16 @@ import { api } from "./api.js";
 
 const uid = () => Math.random().toString(36).slice(2, 7);
 const KINDS: FieldKind[] = ["text", "email", "number", "date", "select", "checkbox", "file", "computed"];
+const KIND_ES: Record<string, string> = {
+  text: "texto", email: "email", number: "número", date: "fecha",
+  select: "lista", checkbox: "casilla", file: "archivo", computed: "calculado",
+};
 
 export function FormDesigner({
   fixedFormId,
   onClose,
-}: { fixedFormId?: string; onClose?: () => void } = {}) {
+  onSaved,
+}: { fixedFormId?: string; onClose?: () => void; onSaved?: () => void } = {}) {
   const [list, setList] = useState<{ id: string; title: string }[]>([]);
   const [form, setForm] = useState<FormDefinition | null>(null);
   const [selId, setSelId] = useState<string | null>(null);
@@ -91,10 +96,11 @@ export function FormDesigner({
     if (!form) return;
     await api(`/forms/${form.id}`, { method: "POST", body: JSON.stringify(form) });
     setList((l) => (l.some((x) => x.id === form.id) ? l.map((x) => (x.id === form.id ? { ...x, title: form.title } : x)) : l));
-    setMsg("Saved ✓");
+    setMsg("Guardado ✓");
+    onSaved?.();
   }
 
-  if (!form) return <p style={{ color: "#64748b" }}>Loading forms…</p>;
+  if (!form) return <p style={{ color: "#64748b" }}>Cargando formularios…</p>;
   const sel = form.fields.find((x) => x.id === selId);
 
   return (
@@ -107,29 +113,29 @@ export function FormDesigner({
                 <option key={f.id} value={f.id}>{f.title}</option>
               ))}
             </select>
-            <button style={S.ghost} onClick={newForm}>New form</button>
+            <button style={S.ghost} onClick={newForm}>Nuevo formulario</button>
           </>
         )}
         <input style={S.title} value={form.title} onChange={(e) => patchForm({ title: e.target.value })} />
         <div style={{ flex: 1 }} />
         {msg && <span style={{ color: "#166534", fontSize: 13 }}>{msg}</span>}
-        <button style={S.primary} onClick={save}>Save</button>
+        <button style={S.primary} onClick={save}>Guardar</button>
         {embedded && onClose && (
-          <button style={S.ghost} onClick={onClose}>Done</button>
+          <button style={S.ghost} onClick={onClose}>Listo</button>
         )}
       </div>
 
       <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "flex-start" }}>
         <div style={S.palette}>
-          <div style={S.paletteHead}>Add field</div>
+          <div style={S.paletteHead}>Agregar campo</div>
           {KINDS.map((k) => (
-            <button key={k} style={S.paletteBtn} onClick={() => addField(k)}>+ {k}</button>
+            <button key={k} style={S.paletteBtn} onClick={() => addField(k)}>+ {KIND_ES[k] ?? k}</button>
           ))}
         </div>
 
         <div style={S.canvas}>
-          <div style={S.paletteHead}>Fields — drag to reorder</div>
-          {form.fields.length === 0 && <p style={S.hint}>No fields yet. Add one from the left.</p>}
+          <div style={S.paletteHead}>Campos — arrastrá para reordenar</div>
+          {form.fields.length === 0 && <p style={S.hint}>Sin campos todavía. Agregá uno desde la izquierda.</p>}
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={form.fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
               {form.fields.map((f) => (
@@ -146,15 +152,15 @@ export function FormDesigner({
         </div>
 
         <div style={S.panel}>
-          <div style={S.paletteHead}>Properties</div>
-          {!sel && <p style={S.hint}>Select a field to edit it.</p>}
+          <div style={S.paletteHead}>Propiedades</div>
+          {!sel && <p style={S.hint}>Seleccioná un campo para editarlo.</p>}
           {sel && <FieldProps field={sel} onChange={(p) => updateField(sel.id, p)} />}
         </div>
       </div>
 
       <div style={S.preview}>
-        <div style={S.paletteHead}>Live preview (same renderer as the portal)</div>
-        <FormRenderer key={JSON.stringify(form.fields.map((f) => f.id))} form={form} submitLabel="Submit" onSubmit={() => {}} />
+        <div style={S.paletteHead}>Vista previa (el mismo render que ve el usuario)</div>
+        <FormRenderer key={JSON.stringify(form.fields.map((f) => f.id))} form={form} submitLabel="Enviar" onSubmit={() => {}} />
       </div>
     </div>
   );
@@ -202,25 +208,25 @@ function FieldRow({
 function FieldProps({ field, onChange }: { field: FormField; onChange: (p: Partial<FormField>) => void }) {
   return (
     <div>
-      <L>Label</L>
+      <L>Etiqueta</L>
       <input style={S.input} value={field.label} onChange={(e) => onChange({ label: e.target.value })} />
-      <L>Bind (context path)</L>
+      <L>Campo (ruta en el contexto)</L>
       <input style={S.input} value={field.bind} onChange={(e) => onChange({ bind: e.target.value })} />
-      <L>Description</L>
+      <L>Descripción</L>
       <input style={S.input} value={field.description ?? ""} onChange={(e) => onChange({ description: e.target.value })} />
       <label style={{ ...S.lbl, display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
         <input type="checkbox" checked={Boolean(field.required)} onChange={(e) => onChange({ required: e.target.checked })} />
-        Required
+        Obligatorio
       </label>
 
       {field.kind === "number" && (
         <div style={{ display: "flex", gap: 8 }}>
           <div style={{ flex: 1 }}>
-            <L>Min</L>
+            <L>Mín</L>
             <input style={S.input} type="number" value={field.min ?? ""} onChange={(e) => onChange({ min: e.target.value === "" ? undefined : Number(e.target.value) })} />
           </div>
           <div style={{ flex: 1 }}>
-            <L>Max</L>
+            <L>Máx</L>
             <input style={S.input} type="number" value={field.max ?? ""} onChange={(e) => onChange({ max: e.target.value === "" ? undefined : Number(e.target.value) })} />
           </div>
         </div>
@@ -228,21 +234,21 @@ function FieldProps({ field, onChange }: { field: FormField; onChange: (p: Parti
 
       {(field.kind === "text" || field.kind === "email") && (
         <>
-          <L>Pattern (regex)</L>
+          <L>Patrón (regex)</L>
           <input style={S.input} value={field.pattern ?? ""} onChange={(e) => onChange({ pattern: e.target.value || undefined })} />
         </>
       )}
 
       {field.kind === "computed" && (
         <>
-          <L>Expression (over other fields)</L>
-          <input style={S.input} placeholder="e.g. price * quantity" value={field.expr ?? ""} onChange={(e) => onChange({ expr: e.target.value || undefined })} />
+          <L>Expresión (sobre otros campos)</L>
+          <input style={S.input} placeholder="ej. price * quantity" value={field.expr ?? ""} onChange={(e) => onChange({ expr: e.target.value || undefined })} />
         </>
       )}
 
       {field.kind === "select" && (
         <>
-          <L>Options (one per line: Label|value)</L>
+          <L>Opciones (una por línea: Etiqueta|valor)</L>
           <textarea
             style={{ ...S.input, height: 80, fontFamily: "monospace" }}
             value={(field.options ?? []).map((o) => `${o.label}|${o.value}`).join("\n")}
@@ -261,9 +267,9 @@ function FieldProps({ field, onChange }: { field: FormField; onChange: (p: Parti
         </>
       )}
 
-      <L>Visible if (expression)</L>
-      <input style={S.input} placeholder="e.g. isCompany == true" value={field.visibleIf ?? ""} onChange={(e) => onChange({ visibleIf: e.target.value || undefined })} />
-      <L>Wizard page</L>
+      <L>Visible si (expresión)</L>
+      <input style={S.input} placeholder="ej. isCompany == true" value={field.visibleIf ?? ""} onChange={(e) => onChange({ visibleIf: e.target.value || undefined })} />
+      <L>Página del asistente</L>
       <input style={S.input} type="number" min={1} placeholder="1" value={field.page ?? ""} onChange={(e) => onChange({ page: e.target.value === "" ? undefined : Math.max(1, Number(e.target.value) || 1) })} />
     </div>
   );

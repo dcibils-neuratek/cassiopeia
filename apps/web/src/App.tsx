@@ -6,42 +6,30 @@ import { Templates } from "./Templates.js";
 import { Home } from "./Home.js";
 import { Stats } from "./Stats.js";
 import { Settings } from "./Settings.js";
+import { Forms } from "./Forms.js";
+import { Agents } from "./Agents.js";
 import { Inbox } from "./Inbox.js";
 import { Login, type CurrentUser } from "./Login.js";
 import { api, getToken, setToken } from "./api.js";
 import { t } from "./i18n.js";
 import { applyStoredTheme } from "./theme.js";
 
-type Mode = "home" | "stats" | "templates" | "build" | "run" | "inbox" | "monitor" | "settings";
+type Mode = "home" | "stats" | "templates" | "build" | "forms" | "agents" | "run" | "inbox" | "monitor" | "settings";
 type DefSummary = { id: string; name: string };
 
 const ROLE_RANK: Record<string, number> = { viewer: 0, operator: 1, analyst: 2, admin: 3 };
 const MODE_MIN: Record<Mode, string> = {
   home: "viewer", stats: "viewer", monitor: "viewer",
   run: "operator", inbox: "operator",
-  templates: "analyst", build: "analyst",
+  templates: "analyst", build: "analyst", forms: "analyst", agents: "analyst",
   settings: "admin",
 };
 const canSee = (role: string, mode: Mode) => (ROLE_RANK[role] ?? 0) >= ROLE_RANK[MODE_MIN[mode]];
 
-const HINTS: Record<Mode, string> = {
-  home: "Your workflows at a glance",
-  stats: "Monitor runs across all workflows",
-  templates: "Start from a ready-made banking workflow",
-  build: "Design the process and its forms",
-  run: "Try it as an end user",
-  inbox: "Your worklist of open human tasks",
-  monitor: "Watch running instances",
-  settings: "API keys and connectors",
-};
-const TITLES: Record<Mode, string> = {
-  home: "Home", stats: "Stats", templates: "Templates", build: "Build",
-  run: "Run", inbox: "Inbox", monitor: "Monitor", settings: "Settings",
-};
-
 const GROUPS: { label: string; items: Mode[] }[] = [
   { label: "Overview", items: ["home", "stats"] },
-  { label: "Workflow", items: ["templates", "build", "run", "inbox", "monitor"] },
+  { label: "Design", items: ["templates", "build", "forms", "agents"] },
+  { label: "Operate", items: ["run", "inbox", "monitor"] },
 ];
 
 export function App() {
@@ -166,6 +154,8 @@ export function App() {
           {mode === "stats" && <Stats />}
           {mode === "templates" && <Templates onUse={useTemplate} />}
           {mode === "build" && <Designer key={defId} defId={defId} />}
+          {mode === "forms" && <Forms />}
+          {mode === "agents" && <Agents />}
           {mode === "run" && <Portal key={defId} defId={defId} />}
           {mode === "inbox" && <Inbox me={user.username} area={user.area ?? null} />}
           {mode === "monitor" && <Monitor />}
@@ -227,6 +217,8 @@ function Icon({ name }: { name: Mode | "settings" }) {
     stats: <><path d="M3 3v18h18" /><rect x="7" y="12" width="3" height="6" /><rect x="12" y="8" width="3" height="10" /><rect x="17" y="4" width="3" height="14" /></>,
     templates: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
     build: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
+    forms: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8" /><path d="M8 12h8" /><path d="M8 16h5" /></>,
+    agents: <><rect x="5" y="8" width="14" height="10" rx="2" /><path d="M12 8V4" /><circle cx="12" cy="3" r="1" /><path d="M9 13h.01" /><path d="M15 13h.01" /></>,
     run: <polygon points="6 4 20 12 6 20 6 4" />,
     inbox: <><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.5 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.5A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.5Z" /></>,
     monitor: <><path d="M3 3v18h18" /><path d="M7 14l3-4 3 3 4-6" /></>,

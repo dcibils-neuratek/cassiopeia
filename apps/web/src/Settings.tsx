@@ -1,27 +1,21 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
-import { McpToolPicker } from "./McpToolPicker.js";
 import { THEMES, getTheme, setTheme } from "./theme.js";
 import { AREA_SUGGESTIONS } from "./areas.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
-type TabId = "appearance" | "users" | "model" | "connectors" | "activity";
+type TabId = "appearance" | "users" | "model" | "activity";
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "appearance", label: "Apariencia", icon: "🎨" },
   { id: "users", label: "Usuarios y acceso", icon: "👥" },
   { id: "model", label: "Modelo de IA", icon: "✦" },
-  { id: "connectors", label: "Conectores", icon: "🔌" },
   { id: "activity", label: "Actividad", icon: "🕘" },
 ];
 
 export function Settings() {
-  const [connectors, setConnectors] = useState<Connector[]>([]);
   const [describer, setDescriber] = useState<Connector>({ id: "describer", type: "ai-agent", config: { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5-20251001", apiKey: "", jsonOutput: false } });
-  const [selId, setSelId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
-  const [testInput, setTestInput] = useState('{ "income": 1200 }');
-  const [testOut, setTestOut] = useState("");
   const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string; area?: string | null }[]>([]);
   const [audit, setAudit] = useState<{ ts: string; actor: string; action: string; target: string | null }[]>([]);
   const [nu, setNu] = useState({ username: "", password: "", displayName: "", role: "operator", area: "" });
@@ -31,7 +25,6 @@ export function Settings() {
 
   async function reload() {
     const r = await api("/connectors");
-    setConnectors(r.data);
     const d = (r.data as Connector[]).find((c) => c.id === "describer");
     if (d) setDescriber(d);
   }
@@ -52,25 +45,6 @@ export function Settings() {
     setMsg(note);
     reload();
   }
-  function newConnector(type: string) {
-    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : type === "http" ? "http" : type === "async-callback" ? "async" : "ai";
-    const id = `${prefix}_${Math.random().toString(36).slice(2, 6)}`;
-    const config = type === "maverick-agent" ? { baseUrl: "https://your-maverick-host", apiKey: "", agentId: "" }
-      : type === "mcp" ? { url: "https://your-mcp-server/mcp", toolName: "", apiKey: "" }
-      : type === "http" ? { url: "", method: "POST" }
-      : type === "async-callback" ? { url: "https://your-async-service/kickoff", callbackBaseUrl: "http://localhost:3001/callbacks" }
-      : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: "You are a task agent inside a business process.", jsonOutput: true };
-    const c = { id, type, config };
-    setConnectors((cs) => [...cs, c]);
-    setSelId(id);
-  }
-  const setCfg = (id: string, k: string, v: any) => setConnectors((cs) => cs.map((c) => (c.id === id ? { ...c, config: { ...c.config, [k]: v } } : c)));
-  async function test(id: string) {
-    let input: any = {}; try { input = JSON.parse(testInput); } catch { setTestOut("Invalid JSON"); return; }
-    setTestOut(JSON.stringify((await api(`/connectors/${id}/test`, { method: "POST", body: JSON.stringify(input) })).data, null, 2));
-  }
-
-  const sel = connectors.find((c) => c.id === selId);
 
   return (
     <div style={{ maxWidth: 900 }}>
@@ -161,94 +135,6 @@ export function Settings() {
             <button key={id} style={{ ...S.ghost, ...(describer.config.model === id ? { border: "1px solid var(--primary)", background: "var(--primary-tint)" } : {}) }}
               onClick={() => setDescriber({ ...describer, config: { ...describer.config, model: id, baseUrl: "https://api.anthropic.com/v1" } })}>{label}</button>
           ))}
-        </div>
-      </section>
-      )}
-
-      {/* ---- Connector library ---- */}
-      {tab === "connectors" && (
-      <section style={S.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={S.h2}>Librería de conectores</h2>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button style={S.ghost} onClick={() => newConnector("ai-agent")}>+ AI agent</button>
-            <button style={S.ghost} onClick={() => newConnector("maverick-agent")}>+ Maverick</button>
-            <button style={S.ghost} onClick={() => newConnector("mcp")}>+ MCP</button>
-            <button style={S.ghost} onClick={() => newConnector("http")}>+ HTTP</button>
-            <button style={S.ghost} onClick={() => newConnector("async-callback")}>+ Async</button>
-          </div>
-        </div>
-        <p style={S.hint}>Las claves de API de los conectores de agente IA y Maverick viven acá — configuralas una vez y reutilizalas en todos los flujos.</p>
-
-        <div style={{ display: "flex", gap: 14, marginTop: 10, alignItems: "flex-start" }}>
-          <div style={S.list}>
-            {connectors.map((c) => (
-              <button key={c.id} onClick={() => { setSelId(c.id); setTestOut(""); }} style={{ ...S.item, ...(selId === c.id ? S.itemActive : {}) }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{c.id}</div>
-                <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{c.type}</div>
-              </button>
-            ))}
-          </div>
-
-          <div style={{ flex: 1 }}>
-            {!sel && <p style={S.hint}>Seleccioná un conector para editarlo.</p>}
-            {sel && (
-              <>
-                {sel.type === "ai-agent" && <>
-                  <L>URL base</L><input style={S.input} value={sel.config.baseUrl ?? ""} onChange={(e) => setCfg(sel.id, "baseUrl", e.target.value)} />
-                  <L>Clave de API</L><input style={S.input} type="password" placeholder="se conserva si lo dejás en blanco" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
-                  <L>Modelo</L><input style={S.input} value={sel.config.model ?? ""} onChange={(e) => setCfg(sel.id, "model", e.target.value)} />
-                  <L>Instrucciones</L><textarea style={{ ...S.input, height: 64 }} value={sel.config.instructions ?? ""} onChange={(e) => setCfg(sel.id, "instructions", e.target.value)} />
-                  <L>Herramientas <span style={S.hint}>el agente puede llamar a estos conectores mientras razona</span></L>
-                  {((sel.config.tools as any[]) ?? []).map((t: any, i: number) => (
-                    <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                      <input style={{ ...S.input, flex: 1 }} placeholder="nombre de la herramienta" value={t.name ?? ""} onChange={(e) => setCfg(sel.id, "tools", ((sel.config.tools as any[]) ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
-                      <select style={{ ...S.input, flex: 1 }} value={t.connector ?? ""} onChange={(e) => setCfg(sel.id, "tools", ((sel.config.tools as any[]) ?? []).map((x, j) => j === i ? { ...x, connector: e.target.value } : x))}>
-                        <option value="">conector…</option>
-                        {connectors.filter((c) => c.id !== sel.id).map((c) => <option key={c.id} value={c.id}>{c.id}</option>)}
-                      </select>
-                      <button style={S.ghost} onClick={() => setCfg(sel.id, "tools", ((sel.config.tools as any[]) ?? []).filter((_, j) => j !== i))}>✕</button>
-                    </div>
-                  ))}
-                  <button style={S.ghost} onClick={() => setCfg(sel.id, "tools", [...((sel.config.tools as any[]) ?? []), { name: "", connector: "" }])}>+ Tool</button>
-                  <L>Claves de salida requeridas <span style={S.hint}>barrera — reintenta una vez si faltan</span></L>
-                  <input style={S.input} placeholder="e.g. riskScore, decision" value={((sel.config.requiredKeys as string[]) ?? []).join(", ")} onChange={(e) => setCfg(sel.id, "requiredKeys", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
-                </>}
-                {sel.type === "maverick-agent" && <>
-                  <L>URL base de Maverick</L><input style={S.input} value={sel.config.baseUrl ?? ""} onChange={(e) => setCfg(sel.id, "baseUrl", e.target.value)} />
-                  <L>Clave de API</L><input style={S.input} type="password" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
-                  <L>ID del agente</L><input style={S.input} value={sel.config.agentId ?? ""} onChange={(e) => setCfg(sel.id, "agentId", e.target.value)} />
-                </>}
-                {sel.type === "mcp" && <>
-                  <L>URL del servidor MCP</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
-                  <L>Clave de API (opcional)</L><input style={S.input} type="password" value={sel.config.apiKey ?? ""} onChange={(e) => setCfg(sel.id, "apiKey", e.target.value)} />
-                  <L>Herramienta</L><McpToolPicker url={sel.config.url} apiKey={sel.config.apiKey} value={sel.config.toolName} onChange={(v) => setCfg(sel.id, "toolName", v)} />
-                </>}
-                {sel.type === "http" && <>
-                  <L>URL</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
-                  <L>Método</L><input style={S.input} value={sel.config.method ?? "POST"} onChange={(e) => setCfg(sel.id, "method", e.target.value)} />
-                </>}
-                {sel.type === "async-callback" && <>
-                  <L>URL de arranque <span style={S.hint}>recibe {"{ input, callbackUrl }"}</span></L>
-                  <input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
-                  <L>URL base de callback</L>
-                  <input style={S.input} value={sel.config.callbackBaseUrl ?? ""} onChange={(e) => setCfg(sel.id, "callbackBaseUrl", e.target.value)} />
-                  <p style={S.hint}>La instancia se detiene tras el arranque y se reanuda cuando el sistema externo hace un POST del JSON de resultado a la URL de callback.</p>
-                </>}
-                {sel.type.startsWith("mock") && <p style={S.hint}>Conector de prueba incorporado — sin configuración.</p>}
-
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  {!sel.type.startsWith("mock") && <button style={S.primary} onClick={() => save(sel, `${sel.id} guardado`)}>Guardar</button>}
-                  <button style={S.ghost} onClick={() => test(sel.id)}>Probar</button>
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  <L>Datos de prueba (JSON)</L>
-                  <textarea style={{ ...S.input, height: 44, fontFamily: "monospace" }} value={testInput} onChange={(e) => setTestInput(e.target.value)} />
-                  {testOut && <pre style={S.pre}>{testOut}</pre>}
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </section>
       )}

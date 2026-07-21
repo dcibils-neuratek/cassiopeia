@@ -37,16 +37,25 @@ apps/
 
 ## Web app (apps/web/src)
 
-Sidebar modes: **Home** (dashboard, live) · **Stats** (live throughput chart) ·
-**Templates** (installable banking workflows) · **Build** (the Studio) · **Run**
-(portal) · **Monitor** (live, per-workflow filter) · **Settings** (LLM keys +
-connector library).
+Sidebar is grouped: **Resumen** (Home, Stats) · **Diseño** (Templates, **Flujos**,
+**Formularios**, **Agentes**) · **Operación** (Run, Inbox, Monitor) · **Settings**.
+The three design surfaces — flows, forms, agents — are independent and reusable
+(one agent/form can power many flows). Operators (non-`build` roles) don't see the
+Diseño group.
 
-**Build (`Designer.tsx`) is canvas-centric:** select a User Task → design its
-form in a side drawer; select a Service Task → pick/configure/test its connector
-inline; gateway edges carry conditions. Toolbar: **Save draft / Publish / ▶ Run**
-(modal, auto-starts) / **✦ Describe** (LLM description) / **✦ Build with AI**
-(prompt-to-workflow chat that generates tasks, gateways, connectors, and forms).
+- **Flujos (`Designer.tsx`)** is canvas-centric: select a User Task → attach/design
+  its form (drawer, same `FormDesigner`); select a Service Task → pick a reusable
+  **agent** (dropdown) or create one, plus per-task resilience; gateway edges carry
+  conditions. Toolbar: Save draft / Publish / ▶ Run / ✦ Describe / ✦ Build with AI.
+- **Formularios (`Forms.tsx`)** is the standalone form library (list + create /
+  duplicate / delete) wrapping the shared `FormDesigner`.
+- **Agentes (`Agents.tsx`)** is the standalone agent library: list + editor (model,
+  base URL, key, prompt, tools, required keys, test). "Agent" is the user-facing
+  name for a `connector` (the engine/DB term is unchanged). The platform `describer`
+  model stays in Settings.
+
+Delete guards: `DELETE /forms/:id` and `DELETE /connectors/:id` return 409 with
+`usedBy` when a flow (or another agent's tools) still references them.
 
 ## Connectors (apps/api/src/connectors.ts)
 

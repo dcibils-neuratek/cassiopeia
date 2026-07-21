@@ -329,6 +329,10 @@ export function listForms(): { id: string; title: string }[] {
   });
 }
 
+export function deleteForm(id: string): void {
+  db.prepare(`DELETE FROM form_definitions WHERE id = ?`).run(id);
+}
+
 // ---- connectors ----
 
 function decryptConfig(config: Record<string, unknown>): Record<string, unknown> {
@@ -394,6 +398,10 @@ export function getConnector(id: string): ConnectorRow {
     | undefined;
   if (!row) throw new Error(`Connector not found: ${id}`);
   return { id: row.id, type: row.type, config: decryptConfig(JSON.parse(row.config_json)) };
+}
+
+export function deleteConnector(id: string): void {
+  db.prepare(`DELETE FROM connectors WHERE id = ?`).run(id);
 }
 
 // ---- instances ----
