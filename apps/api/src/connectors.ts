@@ -461,6 +461,14 @@ export async function runConnector(
   const c = getConnector(connectorId);
   const adapter = adapters[c.type];
   if (!adapter) throw new Error(`No adapter for connector type '${c.type}'`);
+  // Enforce the integration's input contract: required variables must be present.
+  const declaredInputs = c.config.inputs as { name?: string; required?: boolean }[] | undefined;
+  if (Array.isArray(declaredInputs)) {
+    const missing = declaredInputs
+      .filter((v) => v?.required && v.name && ctxPath(input, v.name) == null)
+      .map((v) => v!.name);
+    if (missing.length) throw new Error(`Faltan variables de entrada requeridas: ${missing.join(", ")}`);
+  }
   // 1) resolve the platform key, 2) substitute {{variables}} from the input,
   // 3) run, 4) map the result onto the declared output variables (if any).
   const config = renderDeep(withPlatformKey(connectorId, c.type, c.config), input) as Record<string, unknown>;

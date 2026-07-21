@@ -384,12 +384,15 @@ export function Designer({ defId }: { defId: string }) {
     setMsg(`Conector ${c.id} guardado`);
   }
   async function newConnectorFor(node: ModelNode, type: string) {
-    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : "ai";
+    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : type === "http" ? "api" : "ai";
     const id = `${prefix}_${uid()}`;
-    const config =
+    const base =
       type === "maverick-agent" ? { baseUrl: "https://your-maverick-host", apiKey: "", agentId: "" }
       : type === "mcp" ? { url: "https://your-mcp-server/mcp", toolName: "", apiKey: "" }
+      : type === "http" ? { url: "", method: "POST" }
       : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: "You are a task agent inside a business process.", jsonOutput: true };
+    // Inline-created integrations are published so they're usable right away.
+    const config = { ...base, label: `Integración ${id}`, status: "published" };
     const c: Connector = { id, type, config };
     await api(`/connectors`, { method: "POST", body: JSON.stringify(c) });
     await reloadConnectors();
@@ -858,9 +861,10 @@ function ServiceInspector({
           .map((x) => <option key={x.id} value={x.id}>{(x.config?.label as string)?.trim() || x.id} ({x.type})</option>)}
       </select>
       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-        <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ Nuevo agente IA</button>
-        <button style={S.ghost} onClick={() => onNew("maverick-agent")}>+ Maverick</button>
+        <button style={S.ghost} onClick={() => onNew("http")}>+ API</button>
+        <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ Agente IA</button>
         <button style={S.ghost} onClick={() => onNew("mcp")}>+ MCP</button>
+        <button style={S.ghost} onClick={() => onNew("maverick-agent")}>+ Maverick</button>
       </div>
       <p style={S.hint}>Elegí una integración publicada o creá una. El catálogo completo está en <b>Integraciones</b>.</p>
 
@@ -900,11 +904,35 @@ function ServiceInspector({
       )}
       {c && c.type === "http" && (
         <>
-          <L>URL</L>
-          <input style={S.input} value={c.config.url ?? ""} onChange={(e) => setCfg(c.id, "url", e.target.value)} />
+          <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ flex: 1 }}><L>URL <span style={S.hint}>{"{{variables}}"}</span></L><input style={S.input} value={c.config.url ?? ""} onChange={(e) => setCfg(c.id, "url", e.target.value)} /></div>
+            <div style={{ width: 92 }}><L>Método</L>
+              <select style={S.input} value={c.config.method ?? "POST"} onChange={(e) => setCfg(c.id, "method", e.target.value)}>
+                {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+          </div>
+          <L>Token <span style={S.hint}>Bearer</span></L>
+          <input style={S.input} type="password" placeholder="se conserva si lo dejás en blanco" value={c.config.token ?? ""} onChange={(e) => setCfg(c.id, "token", e.target.value)} />
+          <L>Payload <span style={S.hint}>plantilla JSON con {"{{variables}}"}</span></L>
+          <textarea style={{ ...S.input, height: 74, fontFamily: "monospace" }} placeholder={'{ "x": "{{fullName}}" }'} value={c.config.body ?? ""} onChange={(e) => setCfg(c.id, "body", e.target.value)} />
+          <p style={S.hint}>Headers y el contrato completo se editan en <b>Integraciones</b>.</p>
         </>
       )}
       {c && c.type.startsWith("mock") && <p style={S.hint}>Conector de prueba incorporado — sin configuración.</p>}
+
+      {c && ((Array.isArray(c.config.inputs) && (c.config.inputs as any[]).length > 0) || (Array.isArray(c.config.outputs) && (c.config.outputs as any[]).length > 0)) && (
+        <div style={{ marginTop: 10, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>Contrato</div>
+          {Array.isArray(c.config.inputs) && (c.config.inputs as any[]).length > 0 && (
+            <div style={{ fontSize: 12, marginTop: 4 }}><b>Entradas:</b> {(c.config.inputs as any[]).map((v) => `${v.name}${v.required ? "*" : ""}`).join(", ")}</div>
+          )}
+          {Array.isArray(c.config.outputs) && (c.config.outputs as any[]).length > 0 && (
+            <div style={{ fontSize: 12, marginTop: 2 }}><b>Salidas:</b> {(c.config.outputs as any[]).map((o) => o.name).filter(Boolean).join(", ")}</div>
+          )}
+          <p style={{ ...S.hint, marginTop: 4 }}>Las entradas se toman de variables del mismo nombre en el contexto; las salidas se escriben al contexto.</p>
+        </div>
+      )}
 
       {c && (
         <>
