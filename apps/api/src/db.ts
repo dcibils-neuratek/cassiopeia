@@ -208,6 +208,8 @@ function migrate(): void {
   addColumnIfMissing("form_drafts", "created_at", "created_at TEXT");
   addColumnIfMissing("form_drafts", "reminders_sent", "reminders_sent INTEGER DEFAULT 0");
   addColumnIfMissing("form_drafts", "last_reminder_at", "last_reminder_at TEXT");
+  addColumnIfMissing("audit_log", "ip", "ip TEXT");
+  addColumnIfMissing("audit_log", "user_agent", "user_agent TEXT");
 }
 
 // ---- definitions ----
@@ -672,6 +674,34 @@ export function updateUserArea(username: string, area: string | null): void {
   db.prepare(`UPDATE users SET area = ? WHERE username = ?`).run(area, username);
 }
 
+/** Patch a user's editable profile fields (display name, role, area). */
+export function updateUser(username: string, fields: { displayName?: string; role?: Role; area?: string | null }): void {
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (fields.displayName !== undefined) { sets.push("display_name = ?"); vals.push(fields.displayName); }
+  if (fields.role !== undefined) { sets.push("role = ?"); vals.push(fields.role); }
+  if (fields.area !== undefined) { sets.push("area = ?"); vals.push(fields.area); }
+  if (!sets.length) return;
+  vals.push(username);
+  db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE username = ?`).run(...vals as never[]);
+}
+
+export function setUserPassword(username: string, passwordHash: string, passwordSalt: string): void {
+  db.prepare(`UPDATE users SET password_hash = ?, password_salt = ? WHERE username = ?`).run(passwordHash, passwordSalt, username);
+}
+
+/** Delete a user and revoke their sessions. */
+export function deleteUser(username: string): void {
+  const u = getUserByUsername(username);
+  if (!u) return;
+  db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(u.id);
+  db.prepare(`DELETE FROM users WHERE username = ?`).run(username);
+}
+
+export function countAdmins(): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM users WHERE role = 'admin'`).get() as { n: number }).n;
+}
+
 /** Rename a task queue/area across open tasks and stored definitions (idempotent). */
 export function renameQueue(from: string, to: string): void {
   db.prepare(`UPDATE tasks SET role = ? WHERE role = ?`).run(to, from);
@@ -731,14 +761,22 @@ export function deleteSession(token: string): void {
 
 // ---- audit log (who did what) ----
 
-export function addAudit(actor: string, action: string, target?: string): void {
-  db.prepare(`INSERT INTO audit_log (id, ts, actor, action, target) VALUES (?, ?, ?, ?, ?)`)
-    .run(randomUUID(), new Date().toISOString(), actor, action, target ?? null);
+export interface AuditEntry {
+  ts: string; actor: string; action: string; target: string | null;
+  ip: string | null; userAgent: string | null;
 }
 
-export function listAudit(limit = 200): { ts: string; actor: string; action: string; target: string | null }[] {
-  return db.prepare(`SELECT ts, actor, action, target FROM audit_log ORDER BY ts DESC LIMIT ?`).all(limit) as
-    { ts: string; actor: string; action: string; target: string | null }[];
+export function addAudit(actor: string, action: string, target?: string, ip?: string, userAgent?: string): void {
+  db.prepare(`INSERT INTO audit_log (id, ts, actor, action, target, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(randomUUID(), new Date().toISOString(), actor, action, target ?? null, ip ?? null, userAgent ?? null);
+}
+
+export function listAudit(limit = 500): AuditEntry[] {
+  const rows = db.prepare(`SELECT ts, actor, action, target, ip, user_agent FROM audit_log ORDER BY ts DESC LIMIT ?`).all(limit) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    ts: r.ts as string, actor: r.actor as string, action: r.action as string,
+    target: (r.target as string) ?? null, ip: (r.ip as string) ?? null, userAgent: (r.user_agent as string) ?? null,
+  }));
 }
 
 /** Task-related audit entries for one instance (target = instanceId), oldest first. */

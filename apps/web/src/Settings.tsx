@@ -5,14 +5,13 @@ import { AREA_SUGGESTIONS } from "./areas.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
-type TabId = "appearance" | "users" | "model" | "mail" | "automation" | "activity";
+type TabId = "appearance" | "users" | "model" | "mail" | "automation";
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "appearance", label: "Apariencia", icon: "🎨" },
   { id: "users", label: "Usuarios y acceso", icon: "👥" },
   { id: "model", label: "Modelo de IA", icon: "✦" },
   { id: "mail", label: "Correo", icon: "✉️" },
   { id: "automation", label: "Automatizaciones", icon: "⏱️" },
-  { id: "activity", label: "Actividad", icon: "🕘" },
 ];
 
 export function Settings() {
@@ -22,7 +21,6 @@ export function Settings() {
   const [sweepMsg, setSweepMsg] = useState("");
   const [msg, setMsg] = useState("");
   const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string; area?: string | null }[]>([]);
-  const [audit, setAudit] = useState<{ ts: string; actor: string; action: string; target: string | null }[]>([]);
   const [nu, setNu] = useState({ username: "", password: "", displayName: "", role: "operator", area: "" });
   const [theme, setThemeState] = useState(getTheme());
   function pickTheme(id: string) { setTheme(id); setThemeState(id); }
@@ -46,9 +44,29 @@ export function Settings() {
   }
   async function loadAdmin() {
     const u = await api("/auth/users"); if (u.ok) setUsers(u.data);
-    const a = await api("/audit"); if (a.ok) setAudit(a.data);
   }
   useEffect(() => { reload(); loadAdmin(); }, []);
+
+  function editUser(username: string, patch: Partial<{ displayName: string; role: string; area: string | null }>) {
+    setUsers((us) => us.map((u) => (u.username === username ? { ...u, ...patch } : u)));
+  }
+  async function saveUser(u: { username: string; displayName: string; role: string; area?: string | null }) {
+    const r = await api(`/auth/users/${u.username}`, { method: "PATCH", body: JSON.stringify({ displayName: u.displayName, role: u.role, area: u.area ?? null }) });
+    setMsg(r.ok ? `Usuario ${u.username} actualizado` : (r.data?.error ?? "No se pudo actualizar"));
+    loadAdmin();
+  }
+  async function resetPassword(username: string) {
+    const p = window.prompt(`Nueva contraseña para ${username}:`);
+    if (!p) return;
+    const r = await api(`/auth/users/${username}/password`, { method: "POST", body: JSON.stringify({ password: p }) });
+    setMsg(r.ok ? `Contraseña de ${username} actualizada` : (r.data?.error ?? "No se pudo cambiar la contraseña"));
+  }
+  async function removeUserRow(username: string) {
+    if (!window.confirm(`¿Eliminar al usuario ${username}? Se cierran sus sesiones. No se puede deshacer.`)) return;
+    const r = await api(`/auth/users/${username}`, { method: "DELETE" });
+    setMsg(r.ok ? `Usuario ${username} eliminado` : (r.data?.error ?? "No se pudo eliminar"));
+    loadAdmin();
+  }
 
   async function addUser() {
     const r = await api("/auth/users", { method: "POST", body: JSON.stringify(nu) });
@@ -100,21 +118,38 @@ export function Settings() {
       <section style={S.card}>
         <h2 style={S.h2}>Usuarios y acceso</h2>
         <p style={S.hint}>Los roles son jerárquicos: <b>viewer</b> → <b>operator</b> (ejecutar/bandeja) → <b>analyst</b> (diseñar) → <b>admin</b> (ajustes/usuarios). El <b>área</b> filtra qué tareas ve un operador en su Bandeja e Inicio.</p>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
+        <div style={{ overflowX: "auto", marginTop: 8 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
           <thead><tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
-            <th style={S.th}>Usuario</th><th style={S.th}>Nombre de usuario</th><th style={S.th}>Rol</th><th style={S.th}>Área</th>
+            <th style={S.th}>Usuario</th><th style={S.th}>Nombre visible</th><th style={S.th}>Rol</th><th style={S.th}>Área</th><th style={{ ...S.th, textAlign: "right" }}>Acciones</th>
           </tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
-                <td style={S.td}>{u.displayName}</td><td style={S.td}><code>{u.username}</code></td>
-                <td style={S.td}><span style={S.rolePill}>{u.role}</span></td>
-                <td style={S.td}>{u.area ? <span style={S.areaPill}>{u.area}</span> : <span style={{ color: "var(--text-faint)" }}>—</span>}</td>
+                <td style={S.td}><code>{u.username}</code></td>
+                <td style={S.td}><input style={{ ...S.input, minWidth: 120 }} value={u.displayName} onChange={(e) => editUser(u.username, { displayName: e.target.value })} /></td>
+                <td style={S.td}>
+                  <select style={{ ...S.input, width: 110 }} value={u.role} onChange={(e) => editUser(u.username, { role: e.target.value, ...(e.target.value === "admin" || e.target.value === "analyst" ? { area: null } : {}) })}>
+                    {["viewer", "operator", "analyst", "admin"].map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </td>
+                <td style={S.td}>
+                  <input style={{ ...S.input, width: 120 }} list="area-list" placeholder="—" value={u.area ?? ""} disabled={u.role === "admin" || u.role === "analyst"}
+                    onChange={(e) => editUser(u.username, { area: e.target.value })} />
+                </td>
+                <td style={{ ...S.td, textAlign: "right", whiteSpace: "nowrap" }}>
+                  <button style={S.primary} onClick={() => saveUser(u)}>Guardar</button>{" "}
+                  <button style={S.ghost} onClick={() => resetPassword(u.username)}>Clave</button>{" "}
+                  <button style={S.dangerBtn} onClick={() => removeUserRow(u.username)}>Eliminar</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+        </div>
+        <datalist id="area-list">{AREA_SUGGESTIONS.map((a) => <option key={a} value={a} />)}</datalist>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+          <div style={{ flex: "1 1 100%", fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>Nuevo usuario</div>
           <div style={{ flex: "1 1 130px" }}><L>Nombre de usuario</L><input style={S.input} value={nu.username} onChange={(e) => setNu({ ...nu, username: e.target.value })} /></div>
           <div style={{ flex: "1 1 130px" }}><L>Nombre visible</L><input style={S.input} value={nu.displayName} onChange={(e) => setNu({ ...nu, displayName: e.target.value })} /></div>
           <div style={{ flex: "1 1 120px" }}><L>Contraseña</L><input style={S.input} type="password" value={nu.password} onChange={(e) => setNu({ ...nu, password: e.target.value })} /></div>
@@ -128,7 +163,6 @@ export function Settings() {
               disabled={nu.role === "admin" || nu.role === "analyst"}
               onChange={(e) => setNu({ ...nu, area: e.target.value })} />
           </div>
-          <datalist id="area-list">{AREA_SUGGESTIONS.map((a) => <option key={a} value={a} />)}</datalist>
           <button style={S.primary} onClick={addUser}>Agregar usuario</button>
         </div>
       </section>
@@ -205,30 +239,6 @@ export function Settings() {
       </section>
       )}
 
-      {/* ---- Audit log ---- */}
-      {tab === "activity" && (
-      <section style={S.card}>
-        <h2 style={S.h2}>Actividad reciente</h2>
-        <p style={S.hint}>Quién hizo qué, lo más reciente primero.</p>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, marginTop: 8 }}>
-          <thead><tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
-            <th style={S.th}>Cuándo</th><th style={S.th}>Actor</th><th style={S.th}>Acción</th><th style={S.th}>Objetivo</th>
-          </tr></thead>
-          <tbody>
-            {audit.slice(0, 40).map((a, i) => (
-              <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
-                <td style={S.td}>{new Date(a.ts).toLocaleString()}</td>
-                <td style={S.td}><b>{a.actor}</b></td>
-                <td style={S.td}><code>{a.action}</code></td>
-                <td style={S.td}>{a.target ?? "—"}</td>
-              </tr>
-            ))}
-            {audit.length === 0 && <tr><td style={S.td} colSpan={4}>Todavía no hay actividad.</td></tr>}
-          </tbody>
-        </table>
-      </section>
-      )}
-
       {msg && <div style={S.ok}>{msg}</div>}
     </div>
   );
@@ -259,6 +269,7 @@ const S: Record<string, React.CSSProperties> = {
   itemActive: { border: "1px solid var(--primary)", background: "var(--primary-tint)" },
   primary: { background: "var(--primary)", color: "white", border: 0, borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" },
   ghost: { background: "white", color: "var(--primary)", border: "1px solid var(--primary)", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" },
+  dangerBtn: { background: "white", color: "#b91c1c", border: "1px solid #f6caca", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" },
   pre: { background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: 12, overflowX: "auto", marginTop: 8 },
   ok: { marginTop: 14, background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13 },
   th: { padding: "7px 10px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 },

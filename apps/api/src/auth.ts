@@ -6,11 +6,15 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import {
   createSession,
   createUser,
+  countAdmins,
   countUsers,
   deleteSession,
+  deleteUser,
   getSessionUser,
   getUserByUsername,
+  setUserPassword,
   toPublicUser,
+  updateUser,
   type PublicUser,
   type Role,
   type UserRow,
@@ -62,6 +66,37 @@ export function login(username: string, password: string): { token: string; user
 
 export function logout(token: string): void {
   deleteSession(token);
+}
+
+/** Update a user's profile (display name, role, area). Guards the last admin. */
+export function updateUserProfile(username: string, fields: { displayName?: string; role?: Role; area?: string | null }): PublicUser {
+  const u = getUserByUsername(username);
+  if (!u) throw new Error("Usuario no encontrado");
+  if (fields.role && !ALL_ROLES.includes(fields.role)) throw new Error("Rol inválido");
+  if (fields.role && u.role === "admin" && fields.role !== "admin" && countAdmins() <= 1)
+    throw new Error("No podés quitar el último administrador");
+  // area only makes sense for operators; clear it otherwise
+  const role = fields.role ?? u.role;
+  const patch = { ...fields };
+  if (role === "admin" || role === "analyst") patch.area = null;
+  updateUser(username, patch);
+  return toPublicUser(getUserByUsername(username)!);
+}
+
+/** Reset a user's password (admin action). */
+export function changePassword(username: string, newPassword: string): void {
+  if (!newPassword || newPassword.length < 4) throw new Error("La contraseña debe tener al menos 4 caracteres");
+  if (!getUserByUsername(username)) throw new Error("Usuario no encontrado");
+  const { hash, salt } = hashPassword(newPassword);
+  setUserPassword(username, hash, salt);
+}
+
+/** Delete a user (and revoke their sessions). Guards the last admin. */
+export function removeUser(username: string): void {
+  const u = getUserByUsername(username);
+  if (!u) throw new Error("Usuario no encontrado");
+  if (u.role === "admin" && countAdmins() <= 1) throw new Error("No podés eliminar el último administrador");
+  deleteUser(username);
 }
 
 export function userForToken(token: string | undefined): UserRow | undefined {

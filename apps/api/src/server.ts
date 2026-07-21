@@ -65,7 +65,7 @@ import { startInstance, submitTask, retryInstance, startScheduler, resumeViaCall
 import { exportBundle, importBundle, dataDictionary, auditCsv, type WorkflowBundle } from "./governance.js";
 import { computeAnalytics, analyzeProcess } from "./analytics.js";
 import { buildCase, listCaseSummaries } from "./case.js";
-import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
+import { login, logout, userForToken, registerUser, updateUserProfile, changePassword, removeUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
 import { bancoPage } from "./banco.js";
 import {
   startApplication, statusOf, submitStep, defIdForToken, intakeForm,
@@ -148,6 +148,15 @@ function actor(req: unknown): UserRow {
   return (req as { cassUser: UserRow }).cassUser;
 }
 
+const reqIp = (req: unknown) => String((req as { ip?: string }).ip ?? "");
+const reqUA = (req: unknown) => String((req as { headers?: Record<string, unknown> }).headers?.["user-agent"] ?? "");
+
+/** Write an audit entry enriched with the actor, IP and browser of the request. */
+function audit(req: unknown, action: string, target?: string): void {
+  const u = (req as { cassUser?: UserRow }).cassUser;
+  addAudit(u?.username ?? "anon", action, target, reqIp(req), reqUA(req));
+}
+
 /** Enforce a capability; returns the user or null after sending 403. */
 function requireCap(req: unknown, reply: import("fastify").FastifyReply, cap: Capability): UserRow | null {
   const user = actor(req);
@@ -174,7 +183,7 @@ app.post("/auth/login", async (req, reply) => {
   const { username, password } = (req.body ?? {}) as { username?: string; password?: string };
   const result = login(username ?? "", password ?? "");
   if (!result) return reply.code(401).send({ ok: false, error: "Invalid username or password" });
-  addAudit(result.user.username, "login");
+  addAudit(result.user.username, "login", undefined, reqIp(req), reqUA(req));
   return { ok: true, ...result };
 });
 
@@ -202,11 +211,48 @@ app.post("/auth/users", async (req, reply) => {
   if (!ALL_ROLES.includes(b.role as never)) return reply.code(400).send({ ok: false, error: "Invalid role" });
   try {
     const u = registerUser(b.username ?? "", b.password ?? "", b.displayName ?? "", b.role as never, b.area);
-    addAudit(admin.username, "user.create", u.username);
+    audit(req, "user.create", u.username);
     return { ok: true, user: u };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
   }
+});
+
+app.patch("/auth/users/:username", async (req, reply) => {
+  const admin = requireCap(req, reply, "admin");
+  if (!admin) return;
+  const { username } = req.params as { username: string };
+  const b = (req.body ?? {}) as { displayName?: string; role?: string; area?: string | null };
+  if (b.role !== undefined && !ALL_ROLES.includes(b.role as never)) return reply.code(400).send({ ok: false, error: "Rol inválido" });
+  try {
+    const user = updateUserProfile(username, { displayName: b.displayName, role: b.role as never, area: b.area });
+    audit(req, "user.update", username);
+    return { ok: true, user };
+  } catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+
+app.post("/auth/users/:username/password", async (req, reply) => {
+  const admin = requireCap(req, reply, "admin");
+  if (!admin) return;
+  const { username } = req.params as { username: string };
+  const b = (req.body ?? {}) as { password?: string };
+  try {
+    changePassword(username, b.password ?? "");
+    audit(req, "user.password", username);
+    return { ok: true };
+  } catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+
+app.delete("/auth/users/:username", async (req, reply) => {
+  const admin = requireCap(req, reply, "admin");
+  if (!admin) return;
+  const { username } = req.params as { username: string };
+  if (username === admin.username) return reply.code(400).send({ ok: false, error: "No podés eliminar tu propio usuario" });
+  try {
+    removeUser(username);
+    audit(req, "user.delete", username);
+    return { ok: true };
+  } catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
 });
 
 app.get("/audit", async (req, reply) => {
@@ -308,7 +354,7 @@ app.delete("/drafts/:appId/:nodeId", async (req, reply) => {
   const { appId, nodeId } = req.params as { appId: string; nodeId: string };
   try {
     const label = removeDraft(appId, nodeId);
-    addAudit(actor(req).username, "draft.delete", label);
+    audit(req, "draft.delete", label);
     return { ok: true };
   } catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
 });
@@ -396,7 +442,7 @@ app.post("/templates/:id/install", async (req, reply) => {
   if (!requireCap(req, reply, "build")) return;
   const { id } = req.params as { id: string };
   try {
-    addAudit(actor(req).username, "template.install", id);
+    audit(req, "template.install", id);
     return { ok: true, defId: installTemplate(id) };
   } catch (err) {
     return reply.code(404).send({ ok: false, error: (err as Error).message });
@@ -415,7 +461,7 @@ app.delete("/definitions/:id", async (req, reply) => {
   if (!requireCap(req, reply, "admin")) return;
   const { id } = req.params as { id: string };
   deleteDefinition(id);
-  addAudit(actor(req).username, "definition.delete", id);
+  audit(req, "definition.delete", id);
   return { ok: true };
 });
 
@@ -483,7 +529,7 @@ app.post("/definitions/:id/publish", async (req, reply) => {
   saveDefinition(candidate);
   // keep editing the draft in sync with what was published
   saveDefinition({ ...candidate, version: 0, status: "draft" });
-  addAudit(actor(req).username, "publish", `${id}@v${candidate.version}`);
+  audit(req, "publish", `${id}@v${candidate.version}`);
   return { ok: true, version: candidate.version };
 });
 
@@ -501,7 +547,7 @@ app.post("/definitions/:id/restore/:version", async (req, reply) => {
   try {
     const def = getDefinition(id, Number(version));
     saveDefinition({ ...def, id, version: 0, status: "draft" });
-    addAudit(actor(req).username, "restore", `${id}@v${version}`);
+    audit(req, "restore", `${id}@v${version}`);
     return { ok: true };
   } catch (err) {
     return reply.code(404).send({ ok: false, error: (err as Error).message });
@@ -524,7 +570,7 @@ app.post("/definitions/import", async (req, reply) => {
   const body = (req.body ?? {}) as WorkflowBundle & { targetId?: string };
   try {
     const defId = importBundle(body, body.targetId);
-    addAudit(actor(req).username, "import", defId);
+    audit(req, "import", defId);
     return { ok: true, defId };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
@@ -578,7 +624,7 @@ app.post("/connectors", async (req, reply) => {
   if (!requireCap(req, reply, "build")) return;
   const body = req.body as { id: string; type: string; config: Record<string, unknown> };
   saveConnector({ id: body.id, type: body.type, config: body.config ?? {} });
-  addAudit(actor(req).username, "connector.save", body.id);
+  audit(req, "connector.save", body.id);
   return { ok: true };
 });
 
@@ -594,7 +640,7 @@ app.delete("/connectors/:id", async (req, reply) => {
   }
   if (usedBy.length) return reply.code(409).send({ ok: false, error: "agent in use", usedBy });
   deleteConnector(id);
-  addAudit(actor(req).username, "connector.delete", id);
+  audit(req, "connector.delete", id);
   return { ok: true };
 });
 
@@ -755,7 +801,7 @@ app.post("/forms/:id/duplicate", async (req, reply) => {
   const newId = `form_${randomUUID().slice(0, 6)}`;
   const copy: FormDefinition = { ...src, id: newId, version: 1, title: `${src.title} (copia)` };
   saveForm(copy);
-  addAudit(actor(req).username, "form.duplicate", newId);
+  audit(req, "form.duplicate", newId);
   return { ok: true, id: newId };
 });
 
@@ -766,7 +812,7 @@ app.delete("/forms/:id", async (req, reply) => {
   const usedBy = nodesUsing((n) => n.formId === id);
   if (usedBy.length) return reply.code(409).send({ ok: false, error: "form in use", usedBy });
   deleteForm(id);
-  addAudit(actor(req).username, "form.delete", id);
+  audit(req, "form.delete", id);
   return { ok: true };
 });
 
@@ -802,7 +848,7 @@ app.get("/instances/:id/audit.csv", async (req, reply) => {
 app.post("/definitions/:id/start", async (req, reply) => {
   if (!requireCap(req, reply, "operate")) return;
   const { id } = req.params as { id: string };
-  addAudit(actor(req).username, "instance.start", id);
+  audit(req, "instance.start", id);
   return startInstance(id);
 });
 
@@ -840,7 +886,7 @@ app.post("/definitions/:id/triggers", async (req, reply) => {
   const { id } = req.params as { id: string };
   const { label } = (req.body ?? {}) as { label?: string };
   const t = createTrigger(id, label ?? "");
-  addAudit(actor(req).username, "trigger.create", id);
+  audit(req, "trigger.create", id);
   return { ok: true, trigger: t };
 });
 app.delete("/definitions/:id/triggers/:token", async (req, reply) => {
@@ -862,7 +908,7 @@ app.post("/definitions/:id/schedules", async (req, reply) => {
   const { intervalSeconds, label } = (req.body ?? {}) as { intervalSeconds?: number; label?: string };
   if (!intervalSeconds || intervalSeconds < 5) return reply.code(400).send({ ok: false, error: "intervalSeconds must be >= 5" });
   const s = createSchedule(id, Math.floor(intervalSeconds), label ?? "");
-  addAudit(actor(req).username, "schedule.create", id);
+  audit(req, "schedule.create", id);
   return { ok: true, schedule: s };
 });
 app.delete("/definitions/:id/schedules/:sid", async (req, reply) => {
@@ -877,7 +923,7 @@ app.post("/instances/:id/retry", async (req, reply) => {
   if (!requireCap(req, reply, "operate")) return;
   const { id } = req.params as { id: string };
   try {
-    addAudit(actor(req).username, "instance.retry", id);
+    audit(req, "instance.retry", id);
     const result = await retryInstance(id);
     return { ok: true, result, instance: getInstance(id) };
   } catch (err) {
@@ -934,7 +980,7 @@ app.post("/tasks/:taskId/claim", async (req, reply) => {
   const assignee = can(user.role, "admin") && body.assignee ? body.assignee : user.username;
   try {
     claimTask(taskId, assignee);
-    addAudit(user.username, "task.claim", getTask(taskId).instanceId);
+    audit(req, "task.claim", getTask(taskId).instanceId);
     return { ok: true, assignee };
   } catch (err) {
     return reply.code(400).send({ ok: false, error: (err as Error).message });
@@ -954,7 +1000,7 @@ app.post("/tasks/:taskId/reassign", async (req, reply) => {
   }
   claimTask(taskId, assignee);
   addNotification(assignee, "task-reassigned", `Task reassigned to you by ${user.username}`, task.instanceId);
-  addAudit(user.username, "task.reassign", task.instanceId);
+  audit(req, "task.reassign", task.instanceId);
   return { ok: true, assignee };
 });
 
@@ -962,7 +1008,7 @@ app.post("/tasks/:taskId/submit", async (req, reply) => {
   if (!requireCap(req, reply, "operate")) return;
   const { taskId } = req.params as { taskId: string };
   const body = (req.body ?? {}) as Record<string, unknown>;
-  addAudit(actor(req).username, "task.submit", getTask(taskId).instanceId);
+  audit(req, "task.submit", getTask(taskId).instanceId);
   const result = await submitTask(taskId, body as Record<string, never>);
   const task = getTask(taskId);
   return { result, instance: getInstance(task.instanceId) };

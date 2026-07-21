@@ -10,12 +10,13 @@ import { Forms } from "./Forms.js";
 import { Agents } from "./Agents.js";
 import { Inbox } from "./Inbox.js";
 import { Drafts } from "./Drafts.js";
+import { Audit } from "./Audit.js";
 import { Login, type CurrentUser } from "./Login.js";
 import { api, getToken, setToken } from "./api.js";
 import { t } from "./i18n.js";
 import { applyStoredTheme } from "./theme.js";
 
-type Mode = "home" | "stats" | "templates" | "build" | "forms" | "agents" | "run" | "inbox" | "monitor" | "drafts" | "settings";
+type Mode = "home" | "stats" | "templates" | "build" | "forms" | "agents" | "run" | "inbox" | "monitor" | "drafts" | "audit" | "settings";
 type DefSummary = { id: string; name: string };
 
 const ROLE_RANK: Record<string, number> = { viewer: 0, operator: 1, analyst: 2, admin: 3 };
@@ -23,7 +24,7 @@ const MODE_MIN: Record<Mode, string> = {
   home: "viewer", stats: "viewer", monitor: "viewer",
   run: "operator", inbox: "operator", drafts: "operator",
   templates: "analyst", build: "analyst", forms: "analyst", agents: "analyst",
-  settings: "admin",
+  audit: "admin", settings: "admin",
 };
 const canSee = (role: string, mode: Mode) => (ROLE_RANK[role] ?? 0) >= ROLE_RANK[MODE_MIN[mode]];
 
@@ -31,6 +32,7 @@ const GROUPS: { label: string; items: Mode[] }[] = [
   { label: "Overview", items: ["home", "stats"] },
   { label: "Design", items: ["templates", "build", "forms", "agents"] },
   { label: "Operate", items: ["run", "inbox", "drafts", "monitor"] },
+  { label: "Governance", items: ["audit"] },
 ];
 
 export function App() {
@@ -161,6 +163,7 @@ export function App() {
           {mode === "inbox" && <Inbox me={user.username} area={user.area ?? null} />}
           {mode === "drafts" && <Drafts />}
           {mode === "monitor" && <Monitor />}
+          {mode === "audit" && <Audit />}
           {mode === "settings" && <Settings />}
         </div>
       </main>
@@ -225,6 +228,7 @@ function Icon({ name }: { name: Mode | "settings" }) {
     inbox: <><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.5 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.5A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.5Z" /></>,
     monitor: <><path d="M3 3v18h18" /><path d="M7 14l3-4 3 3 4-6" /></>,
     drafts: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 15h4" /></>,
+    audit: <><path d="M9 12l2 2 4-4" /><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.2.45 4.53 1.24" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></>,
   };
   return (
