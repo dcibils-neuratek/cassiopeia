@@ -419,6 +419,7 @@ export function Designer({ defId }: { defId: string }) {
         {/* AI group */}
         <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Construir con IA</button>
         <button style={S.describe} onClick={openDescribe}>✦ Describir</button>
+        <button style={S.ghost} onClick={openGov}>⚙ Propiedades</button>
         {/* Secondary actions in a compact menu */}
         <div style={{ position: "relative" }}>
           <button style={S.ghost} onClick={() => setMoreOpen((v) => !v)}>⋯ Más</button>
@@ -426,7 +427,6 @@ export function Designer({ defId }: { defId: string }) {
             <>
               <div style={S.menuBackdrop} onClick={() => setMoreOpen(false)} />
               <div style={S.menu}>
-                <button style={S.menuItem} onClick={() => { setMoreOpen(false); openGov(); }}>⚙ Gestionar <span style={S.menuHint}>versiones, API, importar</span></button>
                 <button style={S.menuItem} onClick={() => { setMoreOpen(false); autoLayout(); }}>⤢ Ordenar diagrama</button>
                 <button style={S.menuItem} onClick={() => { setMoreOpen(false); exportWorkflow(); }}>⬇ Exportar</button>
                 <button style={S.menuItem} onClick={() => { setMoreOpen(false); setHelpOpen(true); }}>? Ayuda</button>
@@ -656,7 +656,7 @@ export function Designer({ defId }: { defId: string }) {
           <div style={S.backdrop} onClick={() => setGovOpen(false)} />
           <div style={{ ...S.modal, width: "min(860px, 94vw)", height: "auto", maxHeight: "88vh" }}>
             <div style={S.modalHead}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Gestionar: {name}</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>⚙ Propiedades del flujo: {name}</span>
               <button style={S.ghost} onClick={() => setGovOpen(false)}>Cerrar</button>
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
@@ -688,6 +688,8 @@ export function Designer({ defId }: { defId: string }) {
 
               {govTab === "data" && dataDict && (
                 <>
+                  <p style={S.hint}>El mapa de <b>variables del contexto</b> que circulan por el flujo: quién las <b>produce</b> (un formulario, un agente, la API de arranque) y quién las <b>consume</b> (un gateway, un agente u otro paso). Sirve para <b>detectar cabos sueltos antes de publicar</b>: si una variable se consume pero nadie la produce, ese paso va a fallar o rutear mal — lo verás con un ⚠ abajo.</p>
+                  {dataDict.warnings.length === 0 && dataDict.entries.length > 0 && <div style={S.okMsg}>✓ Todo consistente: cada variable que se usa tiene quién la produzca.</div>}
                   {dataDict.warnings.map((w, i) => <div key={i} style={S.warn}>⚠ {w}</div>)}
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead><tr style={{ color: "#64748b", textAlign: "left" }}>
