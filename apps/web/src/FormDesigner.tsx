@@ -35,6 +35,8 @@ export function FormDesigner({
   const [selId, setSelId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [running, setRunning] = useState(false);
+  const [tab, setTab] = useState<"design" | "preview">("design");
+  const [usage, setUsage] = useState<{ flows: { defId: string; name: string; nodes: string[] }[] } | null>(null);
   const embedded = Boolean(fixedFormId);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -55,6 +57,12 @@ export function FormDesigner({
     setSelId(null);
     setMsg("");
   }
+
+  useEffect(() => {
+    if (!form?.id) { setUsage(null); return; }
+    setUsage(null);
+    api(`/forms/${form.id}/usage`).then((r) => { if (r.ok) setUsage(r.data); });
+  }, [form?.id]);
 
   function patchForm(p: Partial<FormDefinition>) {
     setForm((f) => (f ? { ...f, ...p } : f));
@@ -127,48 +135,66 @@ export function FormDesigner({
         )}
       </div>
 
-      {/* Two columns: build on the left, live preview on the right. */}
-      <div style={S.cols}>
-        <div style={S.builder}>
-          <div style={S.head}>Campos <span style={S.hint}>· arrastrá ⠿ para reordenar</span></div>
-          <div style={S.addRow}>
-            {KINDS.map((k) => (
-              <button key={k} style={S.addBtn} onClick={() => addField(k)}>+ {KIND_ES[k] ?? k}</button>
-            ))}
-          </div>
-          {form.fields.length === 0 && <p style={S.emptyHint}>Sin campos todavía. Agregá uno con los botones de arriba.</p>}
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext items={form.fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
-              {form.fields.map((f) => (
-                <FieldRow
-                  key={f.id}
-                  field={f}
-                  selected={f.id === selId}
-                  onSelect={() => setSelId(f.id)}
-                  onDelete={() => deleteField(f.id)}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+      {usage && usage.flows.length > 0 ? (
+        <div style={S.usedBanner}>
+          <b>En uso</b> — este formulario aparece en:
+          {usage.flows.map((f) => <span key={f.defId}> <b>{f.name}</b> <span style={{ color: "#a16207" }}>({f.nodes.join(", ")})</span>;</span>)}
+          {" "}cambiarlo o borrarlo afecta esos pasos.
         </div>
+      ) : usage ? (
+        <div style={S.freeBanner}>No lo usa ningún flujo — se puede editar o borrar sin afectar nada.</div>
+      ) : null}
 
-        <div style={S.previewCol}>
-          <div style={S.head}>Vista previa <span style={S.hint}>· lo que ve el usuario</span></div>
-          <div style={S.previewCard}>
+      {/* Tabs: keep the design workspace roomy; the preview gets its own airy tab. */}
+      <div style={S.tabBar}>
+        <button style={tab === "design" ? S.tabActive : S.tab} onClick={() => setTab("design")}>Diseño</button>
+        <button style={tab === "preview" ? S.tabActive : S.tab} onClick={() => setTab("preview")}>Vista previa</button>
+      </div>
+
+      {tab === "design" && (
+        <div style={S.cols}>
+          <div style={S.builder}>
+            <div style={S.head}>Campos <span style={S.hint}>· arrastrá ⠿ para reordenar</span></div>
+            <div style={S.addRow}>
+              {KINDS.map((k) => (
+                <button key={k} style={S.addBtn} onClick={() => addField(k)}>+ {KIND_ES[k] ?? k}</button>
+              ))}
+            </div>
+            {form.fields.length === 0 && <p style={S.emptyHint}>Sin campos todavía. Agregá uno con los botones de arriba.</p>}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <SortableContext items={form.fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+                {form.fields.map((f) => (
+                  <FieldRow
+                    key={f.id}
+                    field={f}
+                    selected={f.id === selId}
+                    onSelect={() => setSelId(f.id)}
+                    onDelete={() => deleteField(f.id)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          </div>
+
+          <div style={S.propsCol}>
+            <div style={S.head}>Propiedades{sel ? ` · ${sel.label || sel.bind}` : ""}</div>
+            {!sel
+              ? <p style={S.hint}>Seleccioná un campo (izquierda) para editar sus propiedades.</p>
+              : <FieldProps field={sel} onChange={(p) => updateField(sel.id, p)} />}
+          </div>
+        </div>
+      )}
+
+      {tab === "preview" && (
+        <div style={S.previewTab}>
+          <div style={S.head}>Vista previa <span style={S.hint}>· lo que ve el usuario final</span></div>
+          <div style={S.previewCardBig}>
             {form.fields.length === 0
-              ? <p style={S.emptyHint}>La vista previa aparece acá a medida que agregás campos.</p>
+              ? <p style={S.emptyHint}>Agregá campos en la pestaña <b>Diseño</b> y aparecen acá.</p>
               : <FormRenderer key={JSON.stringify(form.fields.map((f) => f.id))} form={form} submitLabel="Enviar" onSubmit={() => {}} />}
           </div>
         </div>
-      </div>
-
-      {/* Properties of the selected field, full width along the bottom. */}
-      <div style={S.propsBar}>
-        <div style={S.head}>Propiedades{sel ? ` · ${sel.label || sel.bind}` : ""}</div>
-        {!sel
-          ? <p style={S.hint}>Seleccioná un campo (columna izquierda) para editar sus propiedades acá.</p>
-          : <FieldProps field={sel} onChange={(p) => updateField(sel.id, p)} />}
-      </div>
+      )}
 
       {running && <RunModal form={form} onClose={() => setRunning(false)} />}
     </div>
@@ -309,17 +335,24 @@ const S: Record<string, React.CSSProperties> = {
   run: { background: "white", color: "#166534", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   primary: { background: "#2563eb", color: "white", border: 0, borderRadius: 8, padding: "8px 16px", fontSize: 14, cursor: "pointer" },
 
-  cols: { display: "flex", gap: 12, marginTop: 12, alignItems: "flex-start", flexWrap: "wrap" },
-  builder: { flex: "1 1 340px", minWidth: 300, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14, background: "white" },
-  previewCol: { flex: "1 1 320px", minWidth: 280, position: "sticky", top: 12 },
-  previewCard: { border: "1px solid #e2e8f0", borderRadius: 12, padding: 18, background: "#f8fafc" },
+  tabBar: { display: "flex", gap: 6, marginTop: 14, borderBottom: "1px solid #e2e8f0" },
+  tab: { border: 0, borderBottom: "2px solid transparent", background: "transparent", color: "#64748b", fontWeight: 600, fontSize: 13.5, padding: "8px 14px", cursor: "pointer", marginBottom: -1 },
+  tabActive: { border: 0, borderBottom: "2px solid #2563eb", background: "transparent", color: "#0f172a", fontWeight: 700, fontSize: 13.5, padding: "8px 14px", cursor: "pointer", marginBottom: -1 },
+
+  cols: { display: "flex", gap: 12, marginTop: 14, alignItems: "flex-start", flexWrap: "wrap" },
+  builder: { flex: "1 1 360px", minWidth: 300, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14, background: "white" },
+  propsCol: { flex: "1 1 340px", minWidth: 300, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14, background: "white" },
   head: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b", fontWeight: 700, marginBottom: 10 },
   addRow: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #f1f5f9" },
   addBtn: { border: "1px solid #cbd5e1", background: "white", borderRadius: 999, padding: "5px 11px", fontSize: 12, cursor: "pointer", color: "#334155" },
   emptyHint: { fontSize: 13, color: "#94a3b8", padding: "16px 4px" },
 
-  propsBar: { marginTop: 12, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14, background: "white" },
-  propGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 },
+  previewTab: { marginTop: 14, display: "flex", flexDirection: "column", alignItems: "center" },
+  previewCardBig: { width: "100%", maxWidth: 560, border: "1px solid #e2e8f0", borderRadius: 14, padding: "28px 32px", background: "white", boxShadow: "0 8px 30px -18px rgba(0,0,0,0.25)" },
+
+  usedBanner: { background: "#fff4e5", color: "#92400e", border: "1px solid #fde3c2", borderRadius: 10, padding: "9px 12px", fontSize: 13, marginTop: 10 },
+  freeBanner: { background: "#ecfdf5", color: "#166534", border: "1px solid #bbf7d0", borderRadius: 10, padding: "9px 12px", fontSize: 13, marginTop: 10 },
+  propGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 },
   propGroup: { minWidth: 0 },
 
   badge: { fontSize: 10, textTransform: "uppercase", background: "#e8effe", color: "#2563eb", padding: "2px 6px", borderRadius: 4, fontWeight: 700 },

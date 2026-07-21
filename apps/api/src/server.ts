@@ -796,6 +796,25 @@ app.get("/forms/:id", async (req) => {
   return getForm(id);
 });
 
+// Which flows use this form (userTask nodes with formId === id) — powers the
+// "used by" banner so you know what a change/delete affects.
+app.get("/forms/:id/usage", async (req, reply) => {
+  if (!requireCap(req, reply, "read")) return;
+  const { id } = req.params as { id: string };
+  const flows: { defId: string; name: string; nodes: string[] }[] = [];
+  for (const d of listDefinitions()) {
+    try {
+      const def = getEditableDefinition(d.id);
+      if (!def) continue;
+      const nodes = def.nodes
+        .filter((n) => n.type === "userTask" && (n as { formId?: string }).formId === id)
+        .map((n) => (n as { name?: string }).name || n.id);
+      if (nodes.length) flows.push({ defId: def.id, name: def.name, nodes });
+    } catch { /* skip broken defs */ }
+  }
+  return { flows };
+});
+
 // Save a form (MVP: overwrite at version 1; the portal resolves the latest).
 app.post("/forms/:id", async (req, reply) => {
   if (!requireCap(req, reply, "build")) return;

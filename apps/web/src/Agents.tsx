@@ -34,6 +34,7 @@ export function Agents() {
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
   const [usage, setUsage] = useState<{ flows: { defId: string; name: string; nodes: string[] }[]; agents: string[] } | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const [msg, setMsg] = useState("");
   const [testInput, setTestInput] = useState('{ "income": 1200 }');
   const [testOut, setTestOut] = useState("");
@@ -94,9 +95,16 @@ export function Agents() {
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
       {/* ---- integration catalog ---- */}
+      {collapsed ? (
+        <button style={S.rail} title="Mostrar integraciones" onClick={() => setCollapsed(false)}>
+          <span style={{ fontSize: 16 }}>»</span>
+          <span style={S.railLabel}>Integraciones ({connectors.length})</span>
+        </button>
+      ) : (
       <div style={S.sideCard}>
         <div style={S.sideHead}>
           <span style={S.eyebrow}>Integraciones ({connectors.length})</span>
+          <button style={S.iconBtn} title="Colapsar" onClick={() => setCollapsed(true)}>«</button>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "10px 10px 4px" }}>
           <span style={{ ...S.hint, width: "100%", marginTop: 0 }}>+ Nueva conexión:</span>
@@ -125,6 +133,7 @@ export function Agents() {
           {connectors.length === 0 && <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Todavía no hay integraciones. Creá una arriba (API, Agente de IA o MCP).</div>}
         </div>
       </div>
+      )}
 
       {/* ---- editor ---- */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -280,6 +289,8 @@ function L({ children }: { children: React.ReactNode }) { return <label style={S
 
 const S: Record<string, React.CSSProperties> = {
   sideCard: { width: 280, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", boxShadow: "var(--shadow-sm)", overflow: "hidden" },
+  rail: { flexShrink: 0, width: 40, alignSelf: "stretch", minHeight: 220, border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 0", color: "var(--text-muted)" },
+  railLabel: { writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 },
   sideHead: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottom: "1px solid var(--border)" },
   eyebrow: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)", fontWeight: 700 },
   newBtn: { background: "var(--primary)", color: "var(--on-primary)", border: 0, borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" },

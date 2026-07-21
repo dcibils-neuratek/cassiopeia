@@ -10,6 +10,7 @@ export function Forms() {
   const [list, setList] = useState<{ id: string; title: string }[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0); // force-remount the editor after external changes
+  const [collapsed, setCollapsed] = useState(false);
 
   async function reload(selectId?: string) {
     const r = await api("/forms");
@@ -45,10 +46,19 @@ export function Forms() {
 
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+      {collapsed ? (
+        <button style={S.rail} title="Mostrar formularios" onClick={() => setCollapsed(false)}>
+          <span style={{ fontSize: 16 }}>»</span>
+          <span style={S.railLabel}>Formularios ({list.length})</span>
+        </button>
+      ) : (
       <div style={S.sideCard}>
         <div style={S.sideHead}>
           <span style={S.eyebrow}>Formularios ({list.length})</span>
-          <button style={S.newBtn} onClick={newForm}>+ Nuevo</button>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <button style={S.newBtn} onClick={newForm}>+ Nuevo</button>
+            <button style={S.iconBtn} title="Colapsar" onClick={() => setCollapsed(true)}>«</button>
+          </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10 }}>
           {list.map((f) => {
@@ -72,6 +82,7 @@ export function Forms() {
           {list.length === 0 && <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Todavía no hay formularios. Creá uno con <b>+ Nuevo</b>.</div>}
         </div>
       </div>
+      )}
 
       <div style={{ flex: 1, minWidth: 0 }}>
         {sel
@@ -88,4 +99,6 @@ const S: Record<string, React.CSSProperties> = {
   eyebrow: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)", fontWeight: 700 },
   newBtn: { background: "var(--primary)", color: "var(--on-primary)", border: 0, borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
   iconBtn: { border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-muted)", width: 24, height: 24, borderRadius: 6, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" },
+  rail: { flexShrink: 0, width: 40, alignSelf: "stretch", minHeight: 200, border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 0", color: "var(--text-muted)" },
+  railLabel: { writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 },
 };
