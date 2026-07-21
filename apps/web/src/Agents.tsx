@@ -186,11 +186,55 @@ export function Agents() {
             </>}
 
             {sel.type === "http" && <>
-              <L>URL</L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} />
-              <L>Método</L><input style={S.input} value={sel.config.method ?? "POST"} onChange={(e) => setCfg(sel.id, "method", e.target.value)} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}><L>URL <span style={S.hint}>admite {"{{variables}}"}</span></L><input style={S.input} value={sel.config.url ?? ""} onChange={(e) => setCfg(sel.id, "url", e.target.value)} /></div>
+                <div style={{ width: 110 }}><L>Método</L>
+                  <select style={S.input} value={sel.config.method ?? "POST"} onChange={(e) => setCfg(sel.id, "method", e.target.value)}>
+                    {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              <L>Token <span style={S.hint}>se envía como Authorization: Bearer</span></L>
+              <input style={S.input} type="password" placeholder="se conserva si lo dejás en blanco" value={sel.config.token ?? ""} onChange={(e) => setCfg(sel.id, "token", e.target.value)} />
+              <L>Headers</L>
+              {((sel.config.headers as any[]) ?? []).map((hh: any, i: number) => (
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input style={{ ...S.input, flex: 1 }} placeholder="Header" value={hh.key ?? ""} onChange={(e) => setCfg(sel.id, "headers", ((sel.config.headers as any[]) ?? []).map((x, j) => j === i ? { ...x, key: e.target.value } : x))} />
+                  <input style={{ ...S.input, flex: 1 }} placeholder="Valor" value={hh.value ?? ""} onChange={(e) => setCfg(sel.id, "headers", ((sel.config.headers as any[]) ?? []).map((x, j) => j === i ? { ...x, value: e.target.value } : x))} />
+                  <button style={S.iconBtn} onClick={() => setCfg(sel.id, "headers", ((sel.config.headers as any[]) ?? []).filter((_: any, j: number) => j !== i))}>×</button>
+                </div>
+              ))}
+              <button style={S.ghost} onClick={() => setCfg(sel.id, "headers", [...((sel.config.headers as any[]) ?? []), { key: "", value: "" }])}>+ Header</button>
+              <L>Payload <span style={S.hint}>plantilla JSON con {"{{variables}}"}; vacío = manda todo el contexto</span></L>
+              <textarea style={{ ...S.input, height: 100, fontFamily: "monospace" }} placeholder={'{ "nombre": "{{fullName}}", "ingreso": {{monthlyIncome}} }'} value={sel.config.body ?? ""} onChange={(e) => setCfg(sel.id, "body", e.target.value)} />
             </>}
 
             {sel.type.startsWith("mock") && <p style={S.hint}>Agente de prueba incorporado — sin configuración.</p>}
+
+            {!sel.type.startsWith("mock") && (
+            <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+              <div style={S.eyebrow}>Contrato de variables</div>
+              <p style={S.hint}>Qué necesita y qué produce esta integración. Referenciá las <b>entradas</b> con <code style={S.codeInline}>{"{{nombre}}"}</code> en la URL, el prompt o el payload — vienen del contexto del proceso (lo que llenan los formularios). Las <b>salidas</b> se escriben al contexto para gateways y pasos siguientes.</p>
+              <L>Entradas</L>
+              {((sel.config.inputs as any[]) ?? []).map((v: any, i: number) => (
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                  <input style={{ ...S.input, flex: 1 }} placeholder="nombre (ej. monthlyIncome)" value={v.name ?? ""} onChange={(e) => setCfg(sel.id, "inputs", ((sel.config.inputs as any[]) ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}><input type="checkbox" checked={!!v.required} onChange={(e) => setCfg(sel.id, "inputs", ((sel.config.inputs as any[]) ?? []).map((x, j) => j === i ? { ...x, required: e.target.checked } : x))} />requerida</label>
+                  <button style={S.iconBtn} onClick={() => setCfg(sel.id, "inputs", ((sel.config.inputs as any[]) ?? []).filter((_: any, j: number) => j !== i))}>×</button>
+                </div>
+              ))}
+              <button style={S.ghost} onClick={() => setCfg(sel.id, "inputs", [...((sel.config.inputs as any[]) ?? []), { name: "", required: false }])}>+ Entrada</button>
+              <L>Salidas <span style={S.hint}>"desde" = campo en la respuesta (vacío = mismo nombre)</span></L>
+              {((sel.config.outputs as any[]) ?? []).map((o: any, i: number) => (
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input style={{ ...S.input, flex: 1 }} placeholder="nombre (ej. decision)" value={o.name ?? ""} onChange={(e) => setCfg(sel.id, "outputs", ((sel.config.outputs as any[]) ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
+                  <input style={{ ...S.input, flex: 1 }} placeholder="desde (ej. data.decision)" value={o.from ?? ""} onChange={(e) => setCfg(sel.id, "outputs", ((sel.config.outputs as any[]) ?? []).map((x, j) => j === i ? { ...x, from: e.target.value } : x))} />
+                  <button style={S.iconBtn} onClick={() => setCfg(sel.id, "outputs", ((sel.config.outputs as any[]) ?? []).filter((_: any, j: number) => j !== i))}>×</button>
+                </div>
+              ))}
+              <button style={S.ghost} onClick={() => setCfg(sel.id, "outputs", [...((sel.config.outputs as any[]) ?? []), { name: "", from: "" }])}>+ Salida</button>
+            </div>
+            )}
 
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               {!sel.type.startsWith("mock") && <button style={S.primary} disabled={busy} onClick={() => save(sel)}>{busy ? "Guardando…" : "Guardar"}</button>}
@@ -234,4 +278,5 @@ const S: Record<string, React.CSSProperties> = {
   chip: { border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text-muted)", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   chipActive: { border: "1px solid var(--primary)", background: "var(--primary-tint)", color: "var(--primary-strong)" },
   pre: { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, fontSize: 12, overflowX: "auto", marginTop: 10 },
+  codeInline: { fontFamily: "ui-monospace, monospace", fontSize: 11.5, background: "var(--surface-3)", padding: "1px 5px", borderRadius: 4 },
 };

@@ -350,16 +350,40 @@ const adapters: Record<string, Adapter> = {
   },
 
   // Generic REST connector. config: { url, method?, headers? }.
+  // "API" integration: call any REST endpoint. url / headers / body are already
+  // {{variable}}-substituted by runConnector before we get here.
   http: async (input, config) => {
-    const url = String(config.url);
-    const method = (config.method as string) ?? "POST";
-    const res = await fetch(url, {
-      method,
-      headers: { "content-type": "application/json", ...(config.headers as object) },
-      body: method === "GET" ? undefined : JSON.stringify(input),
-    });
-    const data = (await res.json()) as Context;
-    return data;
+    const url = String(config.url ?? "");
+    if (!url) throw new Error("La integración API necesita una URL");
+    const method = String(config.method ?? "POST").toUpperCase();
+
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    const h = config.headers;
+    if (Array.isArray(h)) {
+      for (const it of h as { key?: string; value?: string }[]) if (it?.key) headers[String(it.key)] = String(it.value ?? "");
+    } else if (h && typeof h === "object") {
+      for (const [k, v] of Object.entries(h)) headers[k] = String(v);
+    }
+    if (config.token) headers["authorization"] = `Bearer ${String(config.token)}`;
+
+    let body: string | undefined;
+    if (method !== "GET" && method !== "HEAD") {
+      const b = config.body;
+      if (typeof b === "string" && b.trim()) {
+        try { JSON.parse(b); } catch { throw new Error(`El payload no es JSON válido tras reemplazar variables: ${b.slice(0, 140)}`); }
+        body = b;
+      } else if (b && typeof b === "object") {
+        body = JSON.stringify(b);
+      } else {
+        body = JSON.stringify(input); // no template → send the whole input
+      }
+    }
+
+    const res = await fetch(url, { method, headers, body });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`API HTTP ${res.status}: ${text.slice(0, 300)}`);
+    if (!text) return {};
+    try { return JSON.parse(text) as Context; } catch { return { raw: text }; }
   },
 };
 
@@ -385,6 +409,51 @@ export async function listMcpTools(
   return tools.map((t: any) => ({ name: String(t.name), description: String(t.description ?? "") }));
 }
 
+// ---- {{variable}} templating + output mapping (the integration I/O contract) ----
+
+function ctxPath(ctx: Context, path: string): Json {
+  let cur: Json = ctx;
+  for (const part of path.split(".")) {
+    if (cur == null || typeof cur !== "object" || Array.isArray(cur)) return null;
+    cur = (cur as Record<string, Json>)[part] ?? null;
+  }
+  return cur;
+}
+
+/** Replace {{name}} / {{a.b}} tokens in a string with values from the input. */
+function renderStr(s: string, input: Context): string {
+  return s.replace(/\{\{\s*([\w.$]+)\s*\}\}/g, (_m, path) => {
+    const v = ctxPath(input, String(path));
+    if (v == null) return "";
+    return typeof v === "object" ? JSON.stringify(v) : String(v);
+  });
+}
+
+/** Deep-substitute {{}} tokens across every string in a config value. */
+function renderDeep(val: unknown, input: Context): unknown {
+  if (typeof val === "string") return renderStr(val, input);
+  if (Array.isArray(val)) return val.map((x) => renderDeep(x, input));
+  if (val && typeof val === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val)) out[k] = renderDeep(v, input);
+    return out;
+  }
+  return val;
+}
+
+type OutputSpec = { name: string; from?: string };
+
+/** If the integration declares outputs, project the raw result onto them. */
+function applyOutputs(result: Context, outputs: unknown): Context {
+  if (!Array.isArray(outputs) || outputs.length === 0) return result;
+  const out: Context = {};
+  for (const o of outputs as OutputSpec[]) {
+    if (!o || !o.name) continue;
+    out[o.name] = ctxPath(result, o.from?.trim() || o.name);
+  }
+  return out;
+}
+
 export async function runConnector(
   connectorId: string,
   input: Context,
@@ -392,7 +461,11 @@ export async function runConnector(
   const c = getConnector(connectorId);
   const adapter = adapters[c.type];
   if (!adapter) throw new Error(`No adapter for connector type '${c.type}'`);
-  return adapter(input, withPlatformKey(connectorId, c.type, c.config));
+  // 1) resolve the platform key, 2) substitute {{variables}} from the input,
+  // 3) run, 4) map the result onto the declared output variables (if any).
+  const config = renderDeep(withPlatformKey(connectorId, c.type, c.config), input) as Record<string, unknown>;
+  const result = await adapter(input, config);
+  return applyOutputs(result, config.outputs);
 }
 
 /**
