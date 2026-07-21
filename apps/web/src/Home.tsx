@@ -130,6 +130,17 @@ function BuilderHome({ user, onOpen, onTemplates, onDelete }: {
         <Stat label="Completadas" value={stats?.byStatus.completed ?? 0} accent="#16a34a" />
       </div>
 
+      <div style={S.demoBanner} className="hoverable" onClick={() => window.open("/banco", "_blank", "noopener")}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 22 }}>🏦</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Portal del cliente — Banco del Futuro</div>
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 1 }}>La solicitud de préstamo que ve el cliente. Se abre en otra pestaña e inicia el flujo real.</div>
+          </div>
+        </div>
+        <span style={S.demoOpen}>Abrir portal ↗</span>
+      </div>
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 28 }}>
         <h2 style={S.h2}>Tus flujos</h2>
         <button style={S.ghost} onClick={onTemplates}>+ Nuevo desde plantilla</button>
@@ -182,5 +193,7 @@ const S: Record<string, React.CSSProperties> = {
   ghost: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   del: { position: "absolute", top: 10, right: 10, width: 24, height: 24, borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-faint)", cursor: "pointer", fontSize: 15, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" },
   areaPill: { fontSize: 12, background: "var(--primary-tint)", color: "var(--primary-strong)", borderRadius: 6, padding: "1px 8px", fontWeight: 700 },
+  demoBanner: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 22, padding: "14px 18px", borderRadius: "var(--radius)", border: "1px solid var(--primary-tint-2)", background: "var(--primary-tint)", cursor: "pointer", flexWrap: "wrap" },
+  demoOpen: { background: "var(--primary)", color: "var(--on-primary)", border: 0, borderRadius: "var(--radius-sm)", padding: "8px 14px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" },
   prioPill: { fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: "2px 9px", textTransform: "uppercase", letterSpacing: 0.3 },
 };
