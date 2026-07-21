@@ -116,13 +116,15 @@ function onParked(def: ProcessDefinition, inst: ProcessInstance, result: Advance
   }
 }
 
-/** Start a new instance of a definition and run it until the first wait/sleep/end. */
-export async function startInstance(defId: string, initialContext?: Context): Promise<{
+/** Start a new instance of a definition and run it until the first wait/sleep/end.
+ *  An explicit `id` lets a caller (e.g. the public portal) reuse a pre-issued
+ *  application id as the instance id. */
+export async function startInstance(defId: string, initialContext?: Context, id?: string): Promise<{
   instanceId: string;
   result: AdvanceResult;
 }> {
   const def = getDefinition(defId);
-  const inst = createInstance(def.id, def.version, def.startNodeId);
+  const inst = createInstance(def.id, def.version, def.startNodeId, id);
   if (initialContext && typeof initialContext === "object") inst.context = { ...initialContext };
   addEvent(inst.id, { type: "instance.started" }, new Date().toISOString());
 

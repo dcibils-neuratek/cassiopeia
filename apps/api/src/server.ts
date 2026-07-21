@@ -67,7 +67,11 @@ import { computeAnalytics, analyzeProcess } from "./analytics.js";
 import { buildCase, listCaseSummaries } from "./case.js";
 import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
 import { bancoPage } from "./banco.js";
-import { startApplication, statusOf, submitStep, defIdForToken, intakeForm } from "./public-apply.js";
+import {
+  startApplication, statusOf, submitStep, defIdForToken, intakeForm,
+  journeyIntake, resolveJourney, saveJourneyDraft, submitJourneyStep,
+} from "./public-apply.js";
+import { getJourney } from "./journeys.js";
 
 const app = Fastify({ logger: true, bodyLimit: 20 * 1024 * 1024 }); // allow base64 file uploads
 await app.register(cors, { origin: true });
@@ -230,12 +234,28 @@ app.get("/banco", async (_req, reply) => {
   reply.type("text/html");
   return bancoPage();
 });
-// The intake form schema for a product (so the portal renders it dynamically).
+// Intake: products with a journey return the wizard's steps + a fresh appId;
+// products without one return just the flat form schema (legacy one-shot flow).
 app.get("/apply/:token/intake", async (req, reply) => {
   const { token } = req.params as { token: string };
-  try { return intakeForm(token); }
+  try { return getJourney(token) ? journeyIntake(token) : intakeForm(token); }
   catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
 });
+// Autosave partial wizard input (journey products). Survives multi-session gaps.
+app.put("/apply/:token/:appId/draft", async (req, reply) => {
+  const { token, appId } = req.params as { token: string; appId: string };
+  const body = (req.body ?? {}) as { data?: Record<string, unknown>; page?: number };
+  try { saveJourneyDraft(token, appId, (body.data ?? {}) as Record<string, never>, Number(body.page ?? 0)); return { ok: true }; }
+  catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+// Final submit of the current form step (journey): starts the instance on the
+// intake, or completes a later customer task, then drops the draft.
+app.post("/apply/:token/:appId/submit", async (req, reply) => {
+  const { token, appId } = req.params as { token: string; appId: string };
+  try { return await submitJourneyStep(token, appId, (req.body ?? {}) as Record<string, never>); }
+  catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+// Legacy one-shot start for products without a journey.
 app.post("/apply/:token", async (req, reply) => {
   const { token } = req.params as { token: string };
   try { return await startApplication(token, (req.body ?? {}) as Record<string, never>); }
@@ -243,10 +263,10 @@ app.post("/apply/:token", async (req, reply) => {
 });
 app.get("/apply/:token/:appId", async (req, reply) => {
   const { token, appId } = req.params as { token: string; appId: string };
-  try { return statusOf(defIdForToken(token), appId); }
+  try { return getJourney(token) ? resolveJourney(token, appId) : statusOf(defIdForToken(token), appId); }
   catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
 });
-// Complete the current customer step (offer acceptance, signature, …).
+// Complete the current customer step (offer acceptance, signature, …) — flat products.
 app.post("/apply/:token/:appId/step", async (req, reply) => {
   const { token, appId } = req.params as { token: string; appId: string };
   try { return await submitStep(token, appId, (req.body ?? {}) as Record<string, never>); }

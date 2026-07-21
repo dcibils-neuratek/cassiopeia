@@ -168,6 +168,19 @@ export function initDb(path = "data/cassiopeia.sqlite"): void {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    -- Partial, resumable wizard input for the public portal. One row per open
+    -- customer task (app_id + node_id); committed to the instance on final
+    -- submit, then deleted. Never part of the workflow's audited state.
+    CREATE TABLE IF NOT EXISTS form_drafts (
+      app_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      def_id TEXT NOT NULL,
+      form_id TEXT,
+      data_json TEXT NOT NULL,
+      page INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (app_id, node_id)
+    );
   `);
   migrate();
 }
@@ -410,9 +423,10 @@ export function createInstance(
   defId: string,
   defVersion: number,
   startNodeId: string,
+  id?: string,
 ): ProcessInstance {
   const inst: ProcessInstance = {
-    id: randomUUID(),
+    id: id ?? randomUUID(),
     defId,
     defVersion,
     status: "running",
@@ -855,4 +869,68 @@ export function listEvents(instanceId: string): StoredEvent[] {
     payload: r.payload_json ? JSON.parse(r.payload_json as string) : undefined,
     ts: r.ts as string,
   }));
+}
+
+// ---- form drafts (resumable wizard input for the public portal) ----
+
+export interface FormDraft {
+  appId: string;
+  nodeId: string;
+  defId: string;
+  formId: string | null;
+  data: Context;
+  page: number;
+  updatedAt: string;
+}
+
+/** Upsert the partial input for one open customer task. */
+export function saveDraft(
+  appId: string,
+  nodeId: string,
+  defId: string,
+  formId: string | null,
+  data: Context,
+  page: number,
+): void {
+  db.prepare(
+    `INSERT INTO form_drafts (app_id, node_id, def_id, form_id, data_json, page, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(app_id, node_id) DO UPDATE SET
+       data_json = excluded.data_json, page = excluded.page,
+       form_id = excluded.form_id, updated_at = excluded.updated_at`,
+  ).run(appId, nodeId, defId, formId, JSON.stringify(data ?? {}), page, new Date().toISOString());
+}
+
+export function getDraft(appId: string, nodeId: string): FormDraft | undefined {
+  const r = db.prepare(`SELECT * FROM form_drafts WHERE app_id = ? AND node_id = ?`).get(appId, nodeId) as
+    | Record<string, unknown>
+    | undefined;
+  if (!r) return undefined;
+  return {
+    appId: r.app_id as string,
+    nodeId: r.node_id as string,
+    defId: r.def_id as string,
+    formId: (r.form_id as string) ?? null,
+    data: JSON.parse((r.data_json as string) || "{}"),
+    page: (r.page as number) ?? 0,
+    updatedAt: r.updated_at as string,
+  };
+}
+
+/** Any draft for this application (used before an instance exists — the intake). */
+export function getAnyDraftForApp(appId: string): FormDraft | undefined {
+  const rows = db.prepare(`SELECT node_id FROM form_drafts WHERE app_id = ? ORDER BY updated_at DESC LIMIT 1`).all(appId) as
+    | { node_id: string }[];
+  return rows.length ? getDraft(appId, rows[0].node_id) : undefined;
+}
+
+export function deleteDraft(appId: string, nodeId: string): void {
+  db.prepare(`DELETE FROM form_drafts WHERE app_id = ? AND node_id = ?`).run(appId, nodeId);
+}
+
+/** Sweep drafts untouched for longer than `maxAgeMs` (abandoned wizards). */
+export function purgeStaleDrafts(maxAgeMs: number): number {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  const info = db.prepare(`DELETE FROM form_drafts WHERE updated_at < ?`).run(cutoff);
+  return Number(info.changes ?? 0);
 }
