@@ -50,36 +50,36 @@ export function Portal({ defId, autoStart }: { defId: string; autoStart?: boolea
 
   return (
     <div>
-      <button style={S.primary} onClick={start}>Start new instance</button>
+      <button style={S.primary} onClick={start}>Nueva instancia</button>
       {state && (
         <div style={S.grid}>
           <section style={S.card}>
-            <h2 style={S.h2}>{form ? form.title : "Current task"}</h2>
+            <h2 style={S.h2}>{form ? form.title : "Tarea actual"}</h2>
             {!state.openTask && state.openTimer && (
               <p style={{ color: "#0891b2", fontWeight: 600 }}>
-                ⏱ Waiting until {new Date(state.openTimer.wakeAt).toLocaleString()} — the run resumes automatically.
+                ⏱ En espera hasta {new Date(state.openTimer.wakeAt).toLocaleString()} — la ejecución se reanuda automáticamente.
               </p>
             )}
             {!state.openTask && !state.openTimer && (
               <p style={{ color: "#16a34a", fontWeight: 600 }}>
-                ✓ No open task — instance is {state.instance.status}
+                ✓ Sin tareas abiertas — la instancia está {state.instance.status}
               </p>
             )}
             {state.openTask && form && (
-              <FormRenderer key={state.openTask.id} form={form} initial={state.instance.context as any} submitLabel="Submit" onSubmit={submit} uploadFile={uploadFile} />
+              <FormRenderer key={state.openTask.id} form={form} initial={state.instance.context as any} submitLabel="Enviar" onSubmit={submit} uploadFile={uploadFile} />
             )}
-            {state.openTask && !form && <p style={{ color: "#64748b" }}>Loading form…</p>}
+            {state.openTask && !form && <p style={{ color: "#64748b" }}>Cargando formulario…</p>}
           </section>
 
           <section style={S.card}>
-            <h2 style={S.h2}>Instance</h2>
-            <div style={S.kv}><span>status</span><b>{state.instance.status}</b></div>
-            <div style={S.kv}><span>at node</span><b>{state.instance.currentNodeId}</b></div>
+            <h2 style={S.h2}>Instancia</h2>
+            <div style={S.kv}><span>estado</span><b>{state.instance.status}</b></div>
+            <div style={S.kv}><span>nodo</span><b>{state.instance.currentNodeId}</b></div>
             <pre style={S.pre}>{JSON.stringify(state.instance.context, null, 2)}</pre>
           </section>
 
           <section style={{ ...S.card, gridColumn: "1 / -1" }}>
-            <h2 style={S.h2}>Audit trail</h2>
+            <h2 style={S.h2}>Traza de auditoría</h2>
             <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
               {state.events.map((e, i) => (
                 <li key={i} style={{ fontFamily: "monospace", fontSize: 13 }}>

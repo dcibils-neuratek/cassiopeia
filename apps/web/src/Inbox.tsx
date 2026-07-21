@@ -11,6 +11,7 @@ type Task = {
 };
 
 const PRIO_COLOR: Record<string, string> = { high: "#dc2626", normal: "#2563eb", low: "#64748b" };
+const PRIO_ES: Record<string, string> = { high: "alta", normal: "normal", low: "baja" };
 
 export function Inbox({ me }: { me: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -78,16 +79,16 @@ export function Inbox({ me }: { me: string }) {
 
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-      <div style={{ flex: 1, border: "1px solid var(--border)", borderRadius: 12, background: "white", overflow: "hidden" }}>
+      <div style={{ flex: 1, border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)", overflow: "hidden" }}>
         <div style={S.bar}>
-          <span style={S.head}>Worklist ({shown.length})</span>
+          <span style={S.head}>Tareas ({shown.length})</span>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={S.youLabel}>You: <b style={{ color: "var(--text)" }}>{me}</b></span>
+            <span style={S.youLabel}>Vos: <b style={{ color: "var(--text)" }}>{me}</b></span>
             <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 4, alignItems: "center" }}>
-              <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} /> mine
+              <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} /> mías
             </label>
             <select value={filter} onChange={(e) => setFilter(e.target.value)} style={S.select}>
-              <option value="all">All workflows</option>
+              <option value="all">Todos los flujos</option>
               {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
@@ -95,57 +96,57 @@ export function Inbox({ me }: { me: string }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
-              <th style={S.th}>Task</th><th style={S.th}>Process</th><th style={S.th}>Priority</th><th style={S.th}>Assignee</th><th style={S.th}>Due</th>
+              <th style={S.th}>Tarea</th><th style={S.th}>Flujo</th><th style={S.th}>Prioridad</th><th style={S.th}>Asignado</th><th style={S.th}>Vence</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((t) => (
-              <tr key={t.id} onClick={() => setSel(t)} style={{ cursor: "pointer", borderTop: "1px solid #f1f5f9", background: sel?.id === t.id ? "var(--primary-tint)" : "white" }}>
+              <tr key={t.id} onClick={() => setSel(t)} style={{ cursor: "pointer", borderTop: "1px solid var(--border)", background: sel?.id === t.id ? "var(--primary-tint)" : "var(--surface)" }}>
                 <td style={S.td}>{t.nodeName}</td>
                 <td style={S.td}>{t.processName}</td>
-                <td style={S.td}><span style={{ color: PRIO_COLOR[t.priority ?? "normal"], fontWeight: 700 }}>{t.priority ?? "normal"}</span></td>
-                <td style={S.td}>{t.assignee || <span style={{ color: "#94a3b8" }}>unassigned</span>}</td>
+                <td style={S.td}><span style={{ color: PRIO_COLOR[t.priority ?? "normal"], fontWeight: 700 }}>{PRIO_ES[t.priority ?? "normal"]}</span></td>
+                <td style={S.td}>{t.assignee || <span style={{ color: "#94a3b8" }}>sin asignar</span>}</td>
                 <td style={{ ...S.td, color: overdue(t) ? "#dc2626" : "var(--text)", fontWeight: overdue(t) ? 700 : 400 }}>
                   {t.dueAt ? (overdue(t) ? "⚠ " : "") + new Date(t.dueAt).toLocaleString() : "—"}
                 </td>
               </tr>
             ))}
-            {shown.length === 0 && <tr><td style={S.td} colSpan={5}>No open tasks{mineOnly ? " assigned to you" : ""}.</td></tr>}
+            {shown.length === 0 && <tr><td style={S.td} colSpan={5}>No hay tareas abiertas{mineOnly ? " asignadas a vos" : ""}.</td></tr>}
           </tbody>
         </table>
       </div>
 
-      <div style={{ width: 420, border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "white" }}>
-        <div style={S.head}>Task</div>
-        {!sel && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Select a task to work on it.</p>}
+      <div style={{ width: 420, border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--surface)" }}>
+        <div style={S.head}>Tarea</div>
+        {!sel && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Seleccioná una tarea para trabajarla.</p>}
         {sel && (
           <>
             <h3 style={{ margin: "6px 0 2px", fontSize: 16 }}>{sel.nodeName}</h3>
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>{sel.processName} · <code>{sel.instanceId.slice(0, 8)}</code></div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-              <span style={S.tag}>priority: <b style={{ color: PRIO_COLOR[sel.priority ?? "normal"] }}>{sel.priority ?? "normal"}</b></span>
-              {sel.role && <span style={S.tag}>role: {sel.role}</span>}
-              <span style={S.tag}>assignee: {sel.assignee || "unassigned"}</span>
-              {sel.dueAt && <span style={{ ...S.tag, color: overdue(sel) ? "#dc2626" : undefined }}>{overdue(sel) ? "overdue" : "due"} {new Date(sel.dueAt).toLocaleString()}</span>}
+              <span style={S.tag}>prioridad: <b style={{ color: PRIO_COLOR[sel.priority ?? "normal"] }}>{PRIO_ES[sel.priority ?? "normal"]}</b></span>
+              {sel.role && <span style={S.tag}>rol: {sel.role}</span>}
+              <span style={S.tag}>asignado: {sel.assignee || "sin asignar"}</span>
+              {sel.dueAt && <span style={{ ...S.tag, color: overdue(sel) ? "#dc2626" : undefined }}>{overdue(sel) ? "vencida" : "vence"} {new Date(sel.dueAt).toLocaleString()}</span>}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               {sel.assignee !== me && (
-                <button style={S.claim} disabled={busy} onClick={() => claim(sel)}>Claim for {me}</button>
+                <button style={S.claim} disabled={busy} onClick={() => claim(sel)}>Tomar como {me}</button>
               )}
-              <input style={S.reassignInput} placeholder="reassign to…" value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} />
-              <button style={S.reassignBtn} disabled={busy || !reassignTo.trim()} onClick={() => reassign(sel)}>Reassign</button>
+              <input style={S.reassignInput} placeholder="reasignar a…" value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} />
+              <button style={S.reassignBtn} disabled={busy || !reassignTo.trim()} onClick={() => reassign(sel)}>Reasignar</button>
             </div>
             <div style={{ marginTop: 12 }}>
-              {sel.formId && form && <FormRenderer key={sel.id} form={form} initial={sel.context as any} submitLabel={busy ? "Working…" : "Complete task"} onSubmit={complete} uploadFile={uploadFile} />}
-              {sel.formId && !form && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Loading form…</p>}
+              {sel.formId && form && <FormRenderer key={sel.id} form={form} initial={sel.context as any} submitLabel={busy ? "Procesando…" : "Completar tarea"} onSubmit={complete} uploadFile={uploadFile} />}
+              {sel.formId && !form && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Cargando formulario…</p>}
               {!sel.formId && (
                 <>
-                  <p style={{ color: "var(--text-muted)", fontSize: 13 }}>No form attached to this task.</p>
-                  <button style={S.primary} disabled={busy} onClick={completeNoForm}>Complete task</button>
+                  <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Esta tarea no tiene formulario.</p>
+                  <button style={S.primary} disabled={busy} onClick={completeNoForm}>Completar tarea</button>
                 </>
               )}
             </div>
-            <div style={{ ...S.head, marginTop: 14 }}>Instance data</div>
+            <div style={{ ...S.head, marginTop: 14 }}>Datos de la instancia</div>
             <pre style={S.pre}>{JSON.stringify(sel.context, null, 2)}</pre>
           </>
         )}

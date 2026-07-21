@@ -14,6 +14,7 @@ const ICON: Record<string, string> = {
   "mortgage-sim": "🏠",
   "personal-credit": "💳",
   "travel-notification": "✈️",
+  "loan-preapproval": "💰",
 };
 
 export function Templates({ onUse }: { onUse: (defId: string) => void }) {
@@ -34,9 +35,9 @@ export function Templates({ onUse }: { onUse: (defId: string) => void }) {
 
   return (
     <div>
-      <p style={{ color: "#475569", marginTop: 0, maxWidth: 720 }}>
-        Start from a ready-made banking workflow. Installing a template loads its process,
-        forms, and connectors — open <b>Build</b> to see how it's wired, tweak it, then <b>Run</b> it.
+      <p style={{ color: "var(--text-muted)", marginTop: 0, maxWidth: 720 }}>
+        Empezá desde un flujo bancario listo para usar. Instalar una plantilla carga su proceso,
+        formularios y conectores — abrí <b>Diseñar</b> para ver cómo está armado, ajustalo y después <b>Ejecutalo</b>.
       </p>
       <div style={S.grid}>
         {list.map((t) => (
@@ -47,14 +48,14 @@ export function Templates({ onUse }: { onUse: (defId: string) => void }) {
             </div>
             <p style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>{t.description}</p>
 
-            <div style={S.teachHead}>What it teaches</div>
+            <div style={S.teachHead}>Qué muestra</div>
             <ul style={S.teach}>
               {t.teaches.map((x, i) => <li key={i}>{x}</li>)}
             </ul>
 
             {open === t.id && (
               <div style={S.steps}>
-                <div style={S.teachHead}>How to implement it</div>
+                <div style={S.teachHead}>Cómo funciona</div>
                 <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6, fontSize: 13, color: "#334155" }}>
                   {t.steps.map((x, i) => <li key={i}>{x}</li>)}
                 </ol>
@@ -63,10 +64,10 @@ export function Templates({ onUse }: { onUse: (defId: string) => void }) {
 
             <div style={{ display: "flex", gap: 8, marginTop: "auto", paddingTop: 14 }}>
               <button style={S.primary} disabled={busy === t.id} onClick={() => use(t.id)}>
-                {busy === t.id ? "Installing…" : "Use this template →"}
+                {busy === t.id ? "Instalando…" : "Usar esta plantilla →"}
               </button>
               <button style={S.ghost} onClick={() => setOpen(open === t.id ? null : t.id)}>
-                {open === t.id ? "Hide steps" : "How to implement"}
+                {open === t.id ? "Ocultar pasos" : "Cómo funciona"}
               </button>
             </div>
           </div>

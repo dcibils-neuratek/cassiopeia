@@ -17,7 +17,7 @@ import { saveConnector, saveDefinition, saveForm } from "./db.js";
 
 export const ONBOARDING: ProcessDefinition = {
   id: "onboarding",
-  name: "Customer Onboarding",
+  name: "Alta de cliente",
   version: 1,
   status: "published",
   startNodeId: "start",

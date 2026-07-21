@@ -383,19 +383,19 @@ export function Designer({ defId }: { defId: string }) {
     <div>
       <div style={S.toolbar}>
         <input style={S.nameInput} value={name} onChange={(e) => setName(e.target.value)} />
-        <span style={{ fontSize: 12, color: "#94a3b8" }}>Add:</span>
+        <span style={{ fontSize: 12, color: "#94a3b8" }}>Agregar:</span>
         {(["userTask", "serviceTask", "gateway", "timer", "subprocess", "end", "start"] as const).map((t) => (
           <button key={t} style={S.paletteBtn} onClick={() => addNode(t)}>+ {t}</button>
         ))}
         <div style={{ flex: 1 }} />
-        <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Build with AI</button>
-        <button style={S.describe} onClick={openDescribe}>✦ Describe</button>
-        <button style={S.ghost} onClick={autoLayout} title="Tidy the layout">⤢ Tidy</button>
-        <button style={S.ghost} onClick={openGov}>Manage</button>
-        <button style={S.ghost} onClick={exportWorkflow}>Export</button>
-        <button style={S.ghost} onClick={() => persist(false)}>Save draft</button>
-        <button style={S.ghost} onClick={() => persist(true)}>Publish</button>
-        <button style={S.run} onClick={publishAndRun}>▶ Run</button>
+        <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Construir con IA</button>
+        <button style={S.describe} onClick={openDescribe}>✦ Describir</button>
+        <button style={S.ghost} onClick={autoLayout} title="Ordenar el diagrama">⤢ Ordenar</button>
+        <button style={S.ghost} onClick={openGov}>Gestionar</button>
+        <button style={S.ghost} onClick={exportWorkflow}>Exportar</button>
+        <button style={S.ghost} onClick={() => persist(false)}>Guardar borrador</button>
+        <button style={S.ghost} onClick={() => persist(true)}>Publicar</button>
+        <button style={S.run} onClick={publishAndRun}>▶ Ejecutar</button>
       </div>
 
       {msg && <div style={S.okBar}>{msg}</div>}

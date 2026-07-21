@@ -9,7 +9,7 @@ import { Settings } from "./Settings.js";
 import { Inbox } from "./Inbox.js";
 import { Login, type CurrentUser } from "./Login.js";
 import { api, getToken, setToken } from "./api.js";
-import { t, getLang, setLang, type Lang } from "./i18n.js";
+import { t } from "./i18n.js";
 
 type Mode = "home" | "stats" | "templates" | "build" | "run" | "inbox" | "monitor" | "settings";
 type DefSummary = { id: string; name: string };
@@ -50,10 +50,8 @@ export function App() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(() => (localStorage.getItem("cass.theme") as "light" | "dark") || "light");
-  const [lang, setLangState] = useState<Lang>(getLang());
 
   useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem("cass.theme", theme); } catch { /* ignore */ } }, [theme]);
-  function toggleLang() { const nl: Lang = lang === "en" ? "es" : "en"; setLang(nl); setLangState(nl); }
 
   // Resolve the current session on load; react to forced logout (401).
   useEffect(() => {
@@ -86,7 +84,7 @@ export function App() {
   async function useTemplate(id: string) { setDefId(id); await refreshDefs(); setMode("build"); }
   function openWorkflow(id: string, m: "build" | "run") { setDefId(id); setMode(m); }
   async function deleteWorkflow(id: string, name: string) {
-    if (!window.confirm(`Delete "${name}" and all its runs? This cannot be undone.`)) return;
+    if (!window.confirm(`¿Eliminar "${name}" y todas sus ejecuciones? Esta acción no se puede deshacer.`)) return;
     await api(`/definitions/${id}`, { method: "DELETE" });
     await refreshDefs();
   }
@@ -153,15 +151,14 @@ export function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {showPicker && (
               <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
-                Process
+                Proceso
                 <select value={defId} onChange={(e) => setDefId(e.target.value)} style={S.select}>
                   {defs.length === 0 && <option value={defId}>{defId}</option>}
                   {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </label>
             )}
-            <button onClick={toggleLang} title="Language" style={S.iconPill}>{lang.toUpperCase()}</button>
-            <button onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))} title="Theme" style={S.iconPill}>{theme === "dark" ? "☀" : "☾"}</button>
+            <button onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))} title="Tema" style={S.iconPill}>{theme === "dark" ? "☀" : "☾"}</button>
             <NotificationBell />
           </div>
         </div>
@@ -193,7 +190,7 @@ function NotificationBell() {
   }
   return (
     <div style={{ position: "relative" }}>
-      <button onClick={toggle} title="Notifications" style={NB.btn}>
+      <button onClick={toggle} title="Notificaciones" style={NB.btn}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
         {data.unread > 0 && <span style={NB.badge}>{data.unread}</span>}
       </button>
@@ -201,9 +198,9 @@ function NotificationBell() {
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={() => setOpen(false)} />
           <div style={NB.panel}>
-            <div style={NB.head}>Notifications</div>
+            <div style={NB.head}>Notificaciones</div>
             <div style={{ maxHeight: 360, overflowY: "auto" }}>
-              {data.items.length === 0 && <div style={{ padding: 14, fontSize: 13, color: "var(--text-muted)" }}>Nothing yet.</div>}
+              {data.items.length === 0 && <div style={{ padding: 14, fontSize: 13, color: "var(--text-muted)" }}>Sin novedades.</div>}
               {data.items.map((n) => (
                 <div key={n.id} style={NB.item}>
                   <div style={{ fontSize: 13 }}>{n.message}</div>

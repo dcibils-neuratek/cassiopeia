@@ -21,9 +21,9 @@ export interface Template {
 // ---------- 1. New client onboarding (reuses the sample) ----------
 const onboarding: Template = {
   id: "onboarding",
-  name: "New Client Onboarding",
+  name: "Alta de nuevo cliente",
   description:
-    "Collect a new customer's details and documents, verify them with an AI agent, and either auto-open the account or route high-risk cases to manual review.",
+    "Recolectá los datos y documentos de un nuevo cliente, verificalos con un agente de IA, y abrí la cuenta automáticamente o derivá los casos de alto riesgo a revisión manual.",
   teaches: [
     "A user task with an attached form (legal name, income, documents)",
     "An AI-agent service task that returns a structured risk decision",
@@ -79,9 +79,9 @@ const mortgageOffer: FormDefinition = {
 };
 const mortgage: Template = {
   id: "mortgage-sim",
-  name: "Mortgage Simulator",
+  name: "Simulador de hipoteca",
   description:
-    "Let a prospect simulate a mortgage: capture the property and income, compute the monthly payment and affordability, and present an offer or suggest adjustments.",
+    "Dejá que un prospecto simule una hipoteca: capturá la propiedad y los ingresos, calculá la cuota mensual y la accesibilidad, y presentá una oferta o sugerí ajustes.",
   teaches: [
     "A compute service task (mock-mortgage) returning payment + affordability",
     "A gateway branching on a boolean the connector produced (affordable)",
@@ -96,7 +96,7 @@ const mortgage: Template = {
   forms: [mortgageForm, mortgageOffer],
   connectors: [{ id: "mortgage-calc", type: "mock-mortgage", config: {} }],
   definition: {
-    id: "mortgage-sim", name: "Mortgage Simulator", version: 1, status: "published", startNodeId: "start",
+    id: "mortgage-sim", name: "Simulador de hipoteca", version: 1, status: "published", startNodeId: "start",
     nodes: [
       { id: "start", type: "start" },
       { id: "request", type: "userTask", name: "Loan Request", formId: "mortgage-form" },
@@ -147,9 +147,9 @@ const creditReview: FormDefinition = {
 };
 const credit: Template = {
   id: "personal-credit",
-  name: "Personal Credit Request",
+  name: "Solicitud de crédito personal",
   description:
-    "Take a personal loan application, run an automated credit check, and split into instant approval (sign) or manual underwriting based on the score.",
+    "Tomá una solicitud de crédito personal, corré un chequeo de crédito automático, y separá en aprobación instantánea (firma) o análisis manual según el score.",
   teaches: [
     "A service task that scores an applicant (mock-credit-score)",
     "Routing on a categorical connector result (decision == 'approved')",
@@ -164,7 +164,7 @@ const credit: Template = {
   forms: [creditForm, creditSign, creditReview],
   connectors: [{ id: "credit-score", type: "mock-credit-score", config: {} }],
   definition: {
-    id: "personal-credit", name: "Personal Credit Request", version: 1, status: "published", startNodeId: "start",
+    id: "personal-credit", name: "Solicitud de crédito personal", version: 1, status: "published", startNodeId: "start",
     nodes: [
       { id: "start", type: "start" },
       { id: "apply", type: "userTask", name: "Credit Application", formId: "credit-form" },
@@ -208,9 +208,9 @@ const travelConfirm: FormDefinition = {
 };
 const travel: Template = {
   id: "travel-notification",
-  name: "Card Travel Notification",
+  name: "Aviso de viaje de tarjeta",
   description:
-    "Let a customer tell the bank where and when they're travelling so their card keeps working abroad. Captures trip details, registers them with the card network, and confirms.",
+    "Permití que un cliente le avise al banco dónde y cuándo viaja para que su tarjeta siga funcionando en el exterior. Captura los datos del viaje, los registra con la red de tarjetas y confirma.",
   teaches: [
     "A form with validation (4-digit card, dates) and a date field",
     "A service task that calls out to an external system (mock-travel-register)",
@@ -225,7 +225,7 @@ const travel: Template = {
   forms: [travelForm, travelConfirm],
   connectors: [{ id: "travel-register", type: "mock-travel-register", config: {} }],
   definition: {
-    id: "travel-notification", name: "Card Travel Notification", version: 1, status: "published", startNodeId: "start",
+    id: "travel-notification", name: "Aviso de viaje de tarjeta", version: 1, status: "published", startNodeId: "start",
     nodes: [
       { id: "start", type: "start" },
       { id: "details", type: "userTask", name: "Travel Details", formId: "travel-form" },
@@ -248,48 +248,48 @@ const travel: Template = {
 
 // ---------- 5. Loan pre-approval (end-to-end, human-in-the-loop) ----------
 const loanApplicationForm: FormDefinition = {
-  id: "loan-application", version: 1, title: "Loan Application",
+  id: "loan-application", version: 1, title: "Solicitud de préstamo",
   fields: [
-    { kind: "text", id: "f1", bind: "fullName", label: "Full name", required: true },
+    { kind: "text", id: "f1", bind: "fullName", label: "Nombre completo", required: true },
     { kind: "email", id: "f2", bind: "email", label: "Email", required: true },
-    { kind: "number", id: "f3", bind: "annualIncome", label: "Annual income (USD)", required: true, min: 0 },
-    { kind: "number", id: "f4", bind: "amount", label: "Loan amount requested (USD)", required: true, min: 1000 },
-    { kind: "number", id: "f5", bind: "termYears", label: "Term (years)", required: true, defaultValue: 5, min: 1, max: 30 },
-    { kind: "select", id: "f6", bind: "employmentStatus", label: "Employment status", required: true, options: [
-      { label: "Employed", value: "employed" }, { label: "Self-employed", value: "self" }, { label: "Unemployed", value: "unemployed" }] },
+    { kind: "number", id: "f3", bind: "annualIncome", label: "Ingreso anual (USD)", required: true, min: 0 },
+    { kind: "number", id: "f4", bind: "amount", label: "Monto solicitado (USD)", required: true, min: 1000 },
+    { kind: "number", id: "f5", bind: "termYears", label: "Plazo (años)", required: true, defaultValue: 5, min: 1, max: 30 },
+    { kind: "select", id: "f6", bind: "employmentStatus", label: "Situación laboral", required: true, options: [
+      { label: "En relación de dependencia", value: "employed" }, { label: "Independiente", value: "self" }, { label: "Desempleado", value: "unemployed" }] },
   ],
 };
 const loanSignForm: FormDefinition = {
-  id: "loan-sign-offer", version: 1, title: "Your Offer",
+  id: "loan-sign-offer", version: 1, title: "Tu oferta",
   fields: [
-    { kind: "computed", id: "g1", bind: "monthlyPaymentDisplay", label: "Estimated monthly payment (USD)", expr: "monthlyPayment" },
-    { kind: "computed", id: "g2", bind: "creditScoreDisplay", label: "Your credit score", expr: "creditScore" },
-    { kind: "checkbox", id: "g3", bind: "accepted", label: "I accept the offer terms", required: true },
+    { kind: "computed", id: "g1", bind: "monthlyPaymentDisplay", label: "Cuota mensual estimada (USD)", expr: "monthlyPayment" },
+    { kind: "computed", id: "g2", bind: "creditScoreDisplay", label: "Tu score crediticio", expr: "creditScore" },
+    { kind: "checkbox", id: "g3", bind: "accepted", label: "Acepto las condiciones de la oferta", required: true },
   ],
 };
 const loanUnderwriterForm: FormDefinition = {
-  id: "loan-underwriter", version: 1, title: "Underwriter Review",
+  id: "loan-underwriter", version: 1, title: "Revisión de crédito",
   fields: [
-    { kind: "computed", id: "h0", bind: "scoreShown", label: "Applicant credit score", expr: "creditScore" },
-    { kind: "select", id: "h1", bind: "reviewDecision", label: "Decision", required: true, options: [
-      { label: "Approve", value: "approve" }, { label: "Reject", value: "reject" }] },
-    { kind: "text", id: "h2", bind: "notes", label: "Notes" },
+    { kind: "computed", id: "h0", bind: "scoreShown", label: "Score del solicitante", expr: "creditScore" },
+    { kind: "select", id: "h1", bind: "reviewDecision", label: "Decisión", required: true, options: [
+      { label: "Aprobar", value: "approve" }, { label: "Rechazar", value: "reject" }] },
+    { kind: "text", id: "h2", bind: "notes", label: "Notas" },
   ],
 };
 const loanDef: ProcessDefinition = {
   id: "loan-preapproval", name: "Loan Pre-Approval", version: 0, status: "draft", startNodeId: "s",
   nodes: [
     { id: "s", type: "start" },
-    { id: "apply", type: "userTask", name: "Loan Application", formId: "loan-application" },
-    { id: "credit", type: "serviceTask", name: "Credit Check (AI agent)", connectorId: "credit-agent", inputMap: { annualIncome: "annualIncome", amount: "amount" }, retries: 1, retryDelayMs: 200 },
-    { id: "gwCredit", type: "gateway", name: "Creditworthy?", branches: [{ edgeId: "e_gw_offer", when: "creditScore >= 650" }], defaultEdgeId: "e_gw_review" },
-    { id: "offer", type: "serviceTask", name: "Compute Offer", connectorId: "mock-mortgage", inputMap: { propertyValue: "amount", termYears: "termYears", annualIncome: "annualIncome" } },
-    { id: "sign", type: "userTask", name: "Review & Sign Offer", formId: "loan-sign-offer" },
-    { id: "gwSign", type: "gateway", name: "Accepted?", branches: [{ edgeId: "e_gws_appr", when: "accepted == true" }], defaultEdgeId: "e_gws_decl" },
-    { id: "review", type: "userTask", name: "Underwriter Review", formId: "loan-underwriter", candidateRole: "underwriter", priority: "high", slaHours: 24 },
-    { id: "gwReview", type: "gateway", name: "Underwriter decision?", branches: [{ edgeId: "e_gwr_offer", when: "reviewDecision == 'approve'" }], defaultEdgeId: "e_gwr_decl" },
-    { id: "endApproved", type: "end", name: "Approved" },
-    { id: "endDeclined", type: "end", name: "Declined" },
+    { id: "apply", type: "userTask", name: "Solicitud de préstamo", formId: "loan-application" },
+    { id: "credit", type: "serviceTask", name: "Chequeo de crédito (IA)", connectorId: "credit-agent", inputMap: { annualIncome: "annualIncome", amount: "amount" }, retries: 1, retryDelayMs: 200 },
+    { id: "gwCredit", type: "gateway", name: "¿Apto para crédito?", branches: [{ edgeId: "e_gw_offer", when: "creditScore >= 650" }], defaultEdgeId: "e_gw_review" },
+    { id: "offer", type: "serviceTask", name: "Calcular oferta", connectorId: "mock-mortgage", inputMap: { propertyValue: "amount", termYears: "termYears", annualIncome: "annualIncome" } },
+    { id: "sign", type: "userTask", name: "Revisar y firmar", formId: "loan-sign-offer" },
+    { id: "gwSign", type: "gateway", name: "¿Aceptado?", branches: [{ edgeId: "e_gws_appr", when: "accepted == true" }], defaultEdgeId: "e_gws_decl" },
+    { id: "review", type: "userTask", name: "Revisión de crédito", formId: "loan-underwriter", candidateRole: "underwriter", priority: "high", slaHours: 24 },
+    { id: "gwReview", type: "gateway", name: "¿Decisión del analista?", branches: [{ edgeId: "e_gwr_offer", when: "reviewDecision == 'approve'" }], defaultEdgeId: "e_gwr_decl" },
+    { id: "endApproved", type: "end", name: "Aprobado" },
+    { id: "endDeclined", type: "end", name: "Rechazado" },
   ],
   edges: [
     { id: "e_s_apply", from: "s", to: "apply" },
@@ -313,24 +313,24 @@ const loanDef: ProcessDefinition = {
 };
 const loan: Template = {
   id: "loan-preapproval",
-  name: "Loan Pre-Approval",
+  name: "Pre-aprobación de préstamo",
   description:
-    "A personal-loan pre-approval where the credit check is a real AI agent (Claude) that uses tool-calling: it queries a credit-bureau tool, reasons over the result, and returns a structured decision. Strong applicants are auto-approved; the rest go to a human underwriter — then an offer is computed and signed.",
+    "Pre-aprobación de un préstamo personal donde el chequeo de crédito es un agente de IA real (Claude) con tool-calling: consulta una herramienta de buró, razona sobre el resultado y devuelve una decisión estructurada. Los solicitantes fuertes se aprueban automáticamente; el resto va a un analista humano — luego se calcula la oferta y se firma.",
   teaches: [
-    "A real AI agent (Claude) that uses tool-calling — it calls a credit_bureau tool while reasoning",
-    "Output guardrails (requiredKeys) + a confidence score on the agent's decision",
-    "A gateway that auto-approves on the score and routes the rest to a human",
-    "A prioritized, SLA-backed underwriter task (candidate role: underwriter)",
-    "A join: the underwriter's approval rejoins the automated offer path",
-    "Computed form fields showing the offer (monthly payment, score) read-only",
+    "Un agente de IA real (Claude) con tool-calling — llama a la herramienta credit_bureau mientras razona",
+    "Guardrails de salida (requiredKeys) + un nivel de confianza en la decisión del agente",
+    "Un gateway que auto-aprueba según el score y deriva el resto a un humano",
+    "Una tarea de analista priorizada y con SLA (rol: underwriter)",
+    "Una unión: la aprobación del analista se reincorpora al camino automático de oferta",
+    "Campos calculados que muestran la oferta (cuota, score) en modo lectura",
   ],
   steps: [
-    "Loan Application collects income, amount, term and employment.",
-    "Credit Check is a Claude agent: it calls the credit_bureau tool, reads the profile, and returns {creditScore, decision, reasoning, confidence}.",
-    "Creditworthy? sends score ≥ 650 straight to the offer; the rest to Underwriter Review.",
-    "Underwriter Review (high priority, 24h SLA) approves → offer, or rejects → Declined.",
-    "Compute Offer calls mock-mortgage for the monthly payment; Review & Sign captures acceptance.",
-    "Accepted? ends at Approved or Declined.",
+    "Solicitud de préstamo recolecta ingreso, monto, plazo y situación laboral.",
+    "Chequeo de crédito es un agente Claude: llama a la herramienta credit_bureau, lee el perfil y devuelve {creditScore, decision, reasoning, confidence}.",
+    "¿Apto para crédito? manda score ≥ 650 directo a la oferta; el resto a Revisión de crédito.",
+    "Revisión de crédito (prioridad alta, SLA 24h) aprueba → oferta, o rechaza → Rechazado.",
+    "Calcular oferta usa mock-mortgage para la cuota mensual; Revisar y firmar captura la aceptación.",
+    "¿Aceptado? termina en Aprobado o Rechazado.",
   ],
   definition: loanDef,
   forms: [loanApplicationForm, loanSignForm, loanUnderwriterForm],
@@ -346,7 +346,7 @@ const loan: Template = {
         apiKey: "",
         jsonOutput: true,
         instructions:
-          "You are a credit risk analyst for a personal loan. First call the credit_bureau tool with the applicant's annualIncome and amount to retrieve their credit profile. Then decide. Respond ONLY with a JSON object: {\"creditScore\": <the number from the bureau>, \"decision\": \"approved\" or \"review\", \"reasoning\": \"<one short sentence>\", \"confidence\": <0..1>}.",
+          "Sos un analista de riesgo crediticio para un préstamo personal. Primero llamá a la herramienta credit_bureau con el annualIncome y el amount del solicitante para obtener su perfil crediticio. Después decidí. Respondé SOLO con un objeto JSON: {\"creditScore\": <el número del buró>, \"decision\": \"approved\" o \"review\", \"reasoning\": \"<una frase corta EN ESPAÑOL>\", \"confidence\": <0..1>}.",
         requiredKeys: ["creditScore", "decision"],
         tools: [{
           name: "credit_bureau",

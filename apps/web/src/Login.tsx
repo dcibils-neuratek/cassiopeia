@@ -15,7 +15,7 @@ export function Login({ onLogin }: { onLogin: (user: CurrentUser) => void }) {
     const r = await api("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
     setBusy(false);
     if (r.ok && r.data.token) { setToken(r.data.token); onLogin(r.data.user); }
-    else setErr(r.data?.error ?? "Login failed");
+    else setErr(r.data?.error ?? "No se pudo iniciar sesión");
   }
 
   return (
@@ -28,16 +28,16 @@ export function Login({ onLogin }: { onLogin: (user: CurrentUser) => void }) {
             <div style={{ fontSize: 12, color: "var(--text-faint)" }}>process &amp; form studio</div>
           </div>
         </div>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "10px 0 18px" }}>Sign in to continue.</p>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "10px 0 18px" }}>Iniciá sesión para continuar.</p>
 
-        <label style={S.label}>Username</label>
+        <label style={S.label}>Usuario</label>
         <input autoFocus style={S.input} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" />
-        <label style={S.label}>Password</label>
+        <label style={S.label}>Contraseña</label>
         <input style={S.input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
 
         {err && <div style={S.err}>{err}</div>}
-        <button style={S.btn} disabled={busy} type="submit">{busy ? "Signing in…" : "Sign in"}</button>
-        <p style={S.hint}>First run seeds <b>admin</b> / <b>admin</b> — change it in production.</p>
+        <button style={S.btn} disabled={busy} type="submit">{busy ? "Ingresando…" : "Ingresar"}</button>
+        <p style={S.hint}>El primer arranque crea <b>admin</b> / <b>admin</b> — cambialo en producción.</p>
       </form>
       <div style={S.powered}>POWERED BY <b style={{ color: "var(--text-muted)" }}>Neuratek</b></div>
     </div>

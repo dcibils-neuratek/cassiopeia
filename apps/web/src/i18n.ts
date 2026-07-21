@@ -33,7 +33,7 @@ const DICT: Record<Lang, Record<string, string>> = {
   },
 };
 
-let lang: Lang = (typeof localStorage !== "undefined" && (localStorage.getItem("cass.lang") as Lang)) || "en";
+let lang: Lang = "es"; // single-language product (Banco del Futuro demo)
 
 export const getLang = (): Lang => lang;
 export function setLang(l: Lang): void {

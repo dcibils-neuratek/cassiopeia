@@ -44,14 +44,28 @@ export interface CaseView {
   comments: { author: string; text: string; ts: string }[];
 }
 
+// Spanish business labels for known context keys; falls back to a humanized key.
+const LABELS: Record<string, string> = {
+  fullName: "Nombre", legalName: "Razón social", name: "Nombre", email: "Email",
+  annualIncome: "Ingreso anual", amount: "Monto solicitado", termYears: "Plazo (años)",
+  employmentStatus: "Situación laboral", creditScore: "Score crediticio", decision: "Decisión",
+  reasoning: "Razonamiento", confidence: "Confianza", monthlyPayment: "Cuota mensual",
+  loanAmount: "Monto del préstamo", dti: "DTI", affordable: "Accesible", accepted: "Aceptado",
+  reviewDecision: "Decisión", notes: "Notas", riskScore: "Score de riesgo", verified: "Verificado",
+  scoreShown: "Score", withTax: "Con impuesto", accountId: "N° de cuenta",
+};
+const VALUES: Record<string, string> = {
+  employed: "En relación de dependencia", self: "Independiente", unemployed: "Desempleado",
+  approve: "Aprobar", approved: "Aprobado", reject: "Rechazar", review: "A revisión", declined: "Rechazado",
+};
 function humanize(key: string): string {
-  return key.replace(/([A-Z])/g, " $1").replace(/[._]/g, " ").replace(/^./, (c) => c.toUpperCase()).trim();
+  return LABELS[key] ?? key.replace(/([A-Z])/g, " $1").replace(/[._]/g, " ").replace(/^./, (c) => c.toUpperCase()).trim();
 }
 function fmt(v: Json): string {
   if (v == null) return "—";
-  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (typeof v === "boolean") return v ? "Sí" : "No";
   if (typeof v === "number") return String(v);
-  if (typeof v === "string") return v;
+  if (typeof v === "string") return VALUES[v] ?? v;
   return JSON.stringify(v);
 }
 function scalarFields(obj: Record<string, Json>, skip: Set<string> = new Set()): CaseField[] {
@@ -71,18 +85,18 @@ export interface CaseSummary {
 
 /** Compute outcome (approved/declined/review/running/failed) + label for an instance. */
 function outcomeFor(def: ProcessDefinition, status: string, currentNodeId: string): { outcome: string; label: string } {
-  if (status === "failed") return { outcome: "failed", label: "Failed" };
+  if (status === "failed") return { outcome: "failed", label: "Falló" };
   if (status === "completed") {
     const end = getNode(def, currentNodeId);
     const nm = ("name" in end && end.name) || "";
-    if (/decl|rechaz|reject/i.test(nm)) return { outcome: "declined", label: nm || "Declined" };
-    return { outcome: "approved", label: nm || "Approved" };
+    if (/decl|rechaz|reject/i.test(nm)) return { outcome: "declined", label: nm || "Rechazado" };
+    return { outcome: "approved", label: nm || "Aprobado" };
   }
   try {
     const n = getNode(def, currentNodeId);
-    if (n.type === "userTask" && n.candidateRole) return { outcome: "review", label: "Under review" };
+    if (n.type === "userTask" && n.candidateRole) return { outcome: "review", label: "En revisión" };
   } catch { /* ignore */ }
-  return { outcome: "running", label: "In progress" };
+  return { outcome: "running", label: "En curso" };
 }
 
 /** Lightweight list of all executions for the Executions view. Newest first. */
@@ -132,14 +146,14 @@ export function buildCase(instanceId: string): CaseView {
     const p = (e.payload ?? {}) as Record<string, Json>;
     switch (e.type) {
       case "instance.started":
-        steps.push({ ts: e.ts, kind: "start", title: "Application received" });
+        steps.push({ ts: e.ts, kind: "start", title: "Solicitud recibida" });
         break;
       case "task.completed": {
         const node = e.nodeId ? getNode(def, e.nodeId) : undefined;
         const isStaff = node?.type === "userTask" && !!node.candidateRole;
         steps.push({
           ts: e.ts, kind: "human", title: nodeName(e.nodeId),
-          actor: isStaff ? (staffActorAt(e.ts) ?? node?.candidateRole ?? "Staff") : "Customer",
+          actor: isStaff ? (staffActorAt(e.ts) ?? node?.candidateRole ?? "Personal") : "Cliente",
           fields: scalarFields(p),
         });
         break;
@@ -154,11 +168,11 @@ export function buildCase(instanceId: string): CaseView {
         if (e.nodeId && serviceIsAgent(def, e.nodeId)) {
           const meta: CaseField[] = [];
           if (p.creditScore != null || p.score != null) meta.push({ label: "Score", value: fmt(p.creditScore ?? p.score) });
-          if (p.confidence != null) meta.push({ label: "Confidence", value: `${Math.round(Number(p.confidence) * 100)}%` });
-          if (pendingUsage) { meta.push({ label: "Tokens", value: String(pendingUsage.tokens) }); meta.push({ label: "Cost", value: `$${pendingUsage.cost}` }); }
+          if (p.confidence != null) meta.push({ label: "Confianza", value: `${Math.round(Number(p.confidence) * 100)}%` });
+          if (pendingUsage) { meta.push({ label: "Tokens", value: String(pendingUsage.tokens) }); meta.push({ label: "Costo", value: `$${pendingUsage.cost}` }); }
           steps.push({
-            ts: e.ts, kind: "ai", title: `${nodeName(e.nodeId)} — AI agent`,
-            badge: p.decision != null ? String(p.decision) : undefined,
+            ts: e.ts, kind: "ai", title: `${nodeName(e.nodeId)} — Agente IA`,
+            badge: p.decision != null ? (VALUES[String(p.decision)] ?? String(p.decision)) : undefined,
             detail: p.reasoning != null ? String(p.reasoning) : undefined,
             meta,
           });
@@ -172,19 +186,19 @@ export function buildCase(instanceId: string): CaseView {
         steps.push({ ts: e.ts, kind: "route", title: nodeName(e.nodeId), detail: `→ ${nodeName(p.to as string)}` });
         break;
       case "timer.scheduled":
-        steps.push({ ts: e.ts, kind: "timer", title: nodeName(e.nodeId), detail: "Waiting…" });
+        steps.push({ ts: e.ts, kind: "timer", title: nodeName(e.nodeId), detail: "Esperando…" });
         break;
       case "timer.fired":
-        steps.push({ ts: e.ts, kind: "timer", title: nodeName(e.nodeId), detail: "Resumed" });
+        steps.push({ ts: e.ts, kind: "timer", title: nodeName(e.nodeId), detail: "Reanudado" });
         break;
       case "service.pending":
-        steps.push({ ts: e.ts, kind: "pending", title: nodeName(e.nodeId), detail: "Waiting for an external system…" });
+        steps.push({ ts: e.ts, kind: "pending", title: nodeName(e.nodeId), detail: "Esperando un sistema externo…" });
         break;
       case "callback.received":
-        steps.push({ ts: e.ts, kind: "callback", title: nodeName(e.nodeId), detail: "External result received" });
+        steps.push({ ts: e.ts, kind: "callback", title: nodeName(e.nodeId), detail: "Resultado externo recibido" });
         break;
       case "task.escalated":
-        steps.push({ ts: e.ts, kind: "escalated", title: nodeName(e.nodeId), detail: "SLA breached — escalated to high priority" });
+        steps.push({ ts: e.ts, kind: "escalated", title: nodeName(e.nodeId), detail: "SLA vencido — escalado a prioridad alta" });
         break;
       case "instance.completed": {
         const endName = nodeName(e.nodeId);
@@ -192,7 +206,7 @@ export function buildCase(instanceId: string): CaseView {
         break;
       }
       case "instance.failed":
-        steps.push({ ts: e.ts, kind: "failed", title: "Failed", detail: p.error != null ? String(p.error) : undefined });
+        steps.push({ ts: e.ts, kind: "failed", title: "Falló", detail: p.error != null ? String(p.error) : undefined });
         break;
     }
   }

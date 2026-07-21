@@ -19,38 +19,38 @@ export function Home({ onOpen, onTemplates, onDelete }: { onOpen: (defId: string
   return (
     <div>
       <div style={S.cards}>
-        <Stat label="Workflows" value={stats?.processes ?? "—"} />
-        <Stat label="Total runs" value={stats?.instances ?? "—"} />
-        <Stat label="Active runs" value={active} accent="#d97706" />
-        <Stat label="Completed" value={stats?.byStatus.completed ?? 0} accent="#16a34a" />
+        <Stat label="Flujos" value={stats?.processes ?? "—"} />
+        <Stat label="Ejecuciones totales" value={stats?.instances ?? "—"} />
+        <Stat label="Activas" value={active} accent="#d97706" />
+        <Stat label="Completadas" value={stats?.byStatus.completed ?? 0} accent="#16a34a" />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 28 }}>
-        <h2 style={S.h2}>Your workflows</h2>
-        <button style={S.ghost} onClick={onTemplates}>+ New from template</button>
+        <h2 style={S.h2}>Tus flujos</h2>
+        <button style={S.ghost} onClick={onTemplates}>+ Nuevo desde plantilla</button>
       </div>
 
       <div style={S.grid}>
         {stats?.perProcess.map((p) => (
           <div key={p.id} className="hoverable" style={{ ...S.card, position: "relative" }}>
             {onDelete && (
-              <button title="Delete workflow" style={S.del} onClick={() => onDelete(p.id, p.name)}>×</button>
+              <button title="Eliminar flujo" style={S.del} onClick={() => onDelete(p.id, p.name)}>×</button>
             )}
             <div style={{ fontSize: 16, fontWeight: 700, paddingRight: 20 }}>{p.name}</div>
             <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 12 }}>{p.id}</div>
             <div style={{ display: "flex", gap: 14, fontSize: 13, color: "var(--text-muted)" }}>
-              <span><b style={{ color: "var(--text)" }}>{p.total}</b> runs</span>
-              <span><b style={{ color: "#d97706" }}>{(p.byStatus.running ?? 0) + (p.byStatus.waiting ?? 0)}</b> active</span>
-              <span><b style={{ color: "#16a34a" }}>{p.byStatus.completed ?? 0}</b> done</span>
+              <span><b style={{ color: "var(--text)" }}>{p.total}</b> ejecuciones</span>
+              <span><b style={{ color: "#d97706" }}>{(p.byStatus.running ?? 0) + (p.byStatus.waiting ?? 0)}</b> activas</span>
+              <span><b style={{ color: "#16a34a" }}>{p.byStatus.completed ?? 0}</b> completadas</span>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button style={S.primary} onClick={() => onOpen(p.id, "build")}>Build</button>
-              <button style={S.run} onClick={() => onOpen(p.id, "run")}>▶ Run</button>
+              <button style={S.primary} onClick={() => onOpen(p.id, "build")}>Diseñar</button>
+              <button style={S.run} onClick={() => onOpen(p.id, "run")}>▶ Ejecutar</button>
             </div>
           </div>
         ))}
         {stats && stats.perProcess.length === 0 && (
-          <div style={{ color: "var(--text-muted)" }}>No workflows yet — start from a template.</div>
+          <div style={{ color: "var(--text-muted)" }}>Todavía no hay flujos — empezá desde una plantilla.</div>
         )}
       </div>
     </div>

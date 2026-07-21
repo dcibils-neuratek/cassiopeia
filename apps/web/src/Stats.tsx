@@ -7,6 +7,7 @@ type Point = { date: string; started: number; completed: number };
 type Stats = { processes: number; instances: number; byStatus: Record<string, number>; perProcess: PerProcess[]; recent: Recent[]; timeline: Point[] };
 
 const STATUS_COLOR: Record<string, string> = { running: "#2563eb", waiting: "#d97706", completed: "#16a34a", failed: "#dc2626" };
+const STATUS_ES: Record<string, string> = { running: "en curso", waiting: "en espera", completed: "completadas", failed: "fallidas" };
 const ORDER = ["running", "waiting", "completed", "failed"];
 
 type NodeStat = { nodeId: string; name: string; type: string; visits: number; avgMs: number; maxMs: number };
@@ -72,15 +73,15 @@ export function Stats() {
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 4, background: "#16a34a", display: "inline-block" }} /> live
+          <span style={{ width: 8, height: 8, borderRadius: 4, background: "#16a34a", display: "inline-block" }} /> en vivo
         </span>
-        <button style={S.ghost} onClick={reload}>Refresh</button>
+        <button style={S.ghost} onClick={reload}>Actualizar</button>
       </div>
 
       <div style={S.cards}>
         {ORDER.map((k) => (
           <div key={k} style={S.statCard}>
-            <div className="eyebrow">{k}</div>
+            <div className="eyebrow">{STATUS_ES[k] ?? k}</div>
             <div style={{ fontSize: 28, fontWeight: 800, color: STATUS_COLOR[k], marginTop: 6 }}>{stats.byStatus[k] ?? 0}</div>
           </div>
         ))}
@@ -93,23 +94,23 @@ export function Stats() {
         })}
       </div>
 
-      <h2 style={S.h2}>Throughput (last 14 days)</h2>
+      <h2 style={S.h2}>Volumen (últimos 14 días)</h2>
       <div style={S.panel}>
         <div style={{ padding: 16 }}>
           <div style={{ display: "flex", gap: 16, marginBottom: 10, fontSize: 12, color: "var(--text-muted)" }}>
-            <span><span style={{ ...S.dot, background: "#2563eb" }} /> Started</span>
-            <span><span style={{ ...S.dot, background: "#16a34a" }} /> Completed</span>
+            <span><span style={{ ...S.dot, background: "#2563eb" }} /> Iniciadas</span>
+            <span><span style={{ ...S.dot, background: "#16a34a" }} /> Completadas</span>
           </div>
           <Throughput data={stats.timeline} />
         </div>
       </div>
 
-      <h2 style={S.h2}>By workflow</h2>
+      <h2 style={S.h2}>Por flujo</h2>
       <div style={S.panel}>
         <table style={S.table}>
           <thead><tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
-            <th style={S.th}>Workflow</th><th style={S.th}>Runs</th>
-            {ORDER.map((k) => <th key={k} style={S.th}>{k}</th>)}
+            <th style={S.th}>Flujo</th><th style={S.th}>Ejec.</th>
+            {ORDER.map((k) => <th key={k} style={S.th}>{STATUS_ES[k] ?? k}</th>)}
           </tr></thead>
           <tbody>
             {stats.perProcess.map((p) => (
@@ -124,27 +125,27 @@ export function Stats() {
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 28 }}>
-        <h2 style={{ ...S.h2, margin: 0 }}>Cycle time &amp; AI analyst</h2>
+        <h2 style={{ ...S.h2, margin: 0 }}>Tiempos &amp; analista IA</h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <select value={selDef} onChange={(e) => setSelDef(e.target.value)} style={S.select}>
             {stats.perProcess.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button style={S.aiBtn} disabled={aBusy} onClick={analyze}>{aBusy ? "Analyzing…" : "✦ Analyze with AI"}</button>
+          <button style={S.aiBtn} disabled={aBusy} onClick={analyze}>{aBusy ? "Analizando…" : "✦ Analizar con IA"}</button>
         </div>
       </div>
 
       {analytics && (
         <div style={{ ...S.panel, marginTop: 10 }}>
           <div style={{ display: "flex", gap: 24, padding: 16, flexWrap: "wrap", borderBottom: "1px solid var(--border)" }}>
-            <Metric label="Avg completion time" value={fmtMs(analytics.avgCycleMs)} />
-            <Metric label="Completed" value={String(analytics.completedCount)} />
-            <Metric label="Bottleneck" value={analytics.bottleneck ? `${analytics.bottleneck.name} · ${fmtMs(analytics.bottleneck.avgMs)}` : "—"} />
-            <Metric label="AI tokens" value={(analytics.aiTokens ?? 0).toLocaleString()} />
-            <Metric label="Est. AI cost" value={`$${(analytics.aiCost ?? 0).toFixed(4)}`} />
+            <Metric label="Tiempo prom. de fin" value={fmtMs(analytics.avgCycleMs)} />
+            <Metric label="Completadas" value={String(analytics.completedCount)} />
+            <Metric label="Cuello de botella" value={analytics.bottleneck ? `${analytics.bottleneck.name} · ${fmtMs(analytics.bottleneck.avgMs)}` : "—"} />
+            <Metric label="Tokens IA" value={(analytics.aiTokens ?? 0).toLocaleString()} />
+            <Metric label="Costo IA est." value={`$${(analytics.aiCost ?? 0).toFixed(4)}`} />
           </div>
           <table style={S.table}>
             <thead><tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
-              <th style={S.th}>Step</th><th style={S.th}>Type</th><th style={S.th}>Avg time</th><th style={S.th}>Max</th><th style={S.th}>Visits</th>
+              <th style={S.th}>Paso</th><th style={S.th}>Tipo</th><th style={S.th}>Tiempo prom.</th><th style={S.th}>Máx</th><th style={S.th}>Visitas</th>
             </tr></thead>
             <tbody>
               {analytics.nodeStats.map((n) => {
@@ -159,12 +160,12 @@ export function Stats() {
                   </tr>
                 );
               })}
-              {analytics.nodeStats.length === 0 && <tr><td style={S.td} colSpan={5}>No run data yet — start some instances.</td></tr>}
+              {analytics.nodeStats.length === 0 && <tr><td style={S.td} colSpan={5}>Sin datos todavía — iniciá algunas ejecuciones.</td></tr>}
             </tbody>
           </table>
           {analytics.gatewayDistribution.length > 0 && (
             <div style={{ padding: 16, borderTop: "1px solid var(--border)" }}>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>Gateway branches</div>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>Ramas de gateways</div>
               {analytics.gatewayDistribution.map((g) => (
                 <div key={g.nodeId} style={{ fontSize: 13, marginBottom: 4 }}>
                   <b>{g.name}:</b> {g.branches.map((b) => `${b.toName} (${b.count})`).join(" · ")}
@@ -177,16 +178,16 @@ export function Stats() {
       {aErr && <div style={S.err}>{aErr}</div>}
       {suggestions && (
         <div style={{ ...S.panel, marginTop: 12, padding: 18 }}>
-          <div className="eyebrow" style={{ marginBottom: 8 }}>✦ AI analyst suggestions</div>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>✦ Sugerencias del analista IA</div>
           <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "var(--text)" }}>{suggestions}</div>
         </div>
       )}
 
-      <h2 style={S.h2}>Recent runs</h2>
+      <h2 style={S.h2}>Ejecuciones recientes</h2>
       <div style={S.panel}>
         <table style={S.table}>
           <thead><tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
-            <th style={S.th}>Instance</th><th style={S.th}>Workflow</th><th style={S.th}>Status</th><th style={S.th}>At node</th>
+            <th style={S.th}>Instancia</th><th style={S.th}>Flujo</th><th style={S.th}>Estado</th><th style={S.th}>Nodo</th>
           </tr></thead>
           <tbody>
             {stats.recent.map((r) => (
@@ -197,7 +198,7 @@ export function Stats() {
                 <td style={S.td}>{r.currentNodeId}</td>
               </tr>
             ))}
-            {stats.recent.length === 0 && <tr><td style={S.td} colSpan={4}>No runs yet.</td></tr>}
+            {stats.recent.length === 0 && <tr><td style={S.td} colSpan={4}>Sin ejecuciones todavía.</td></tr>}
           </tbody>
         </table>
       </div>

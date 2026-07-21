@@ -10,6 +10,7 @@ type CaseView = {
   steps: Step[]; comments: { author: string; text: string; ts: string }[];
 };
 
+const STATUS_ES: Record<string, string> = { running: "en curso", waiting: "en espera", completed: "completada", failed: "fallida" };
 const OUTCOME: Record<string, { bg: string; fg: string; label?: string }> = {
   approved: { bg: "#dcfce7", fg: "#166534" },
   declined: { bg: "#fee2e2", fg: "#991b1b" },
@@ -77,19 +78,19 @@ export function Monitor() {
     const c = caseView; const oc = OUTCOME[c.outcome] ?? OUTCOME.running;
     return (
       <div style={{ maxWidth: 860 }}>
-        <button style={S.back} onClick={back}>← All executions</button>
+        <button style={S.back} onClick={back}>← Todas las ejecuciones</button>
         <div style={S.caseHead}>
           <div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{c.processName} · <code>{c.instanceId.slice(0, 8)}</code></div>
-            <h2 style={{ margin: "4px 0 0", fontSize: 22 }}>{c.subject ?? "Application"}</h2>
+            <h2 style={{ margin: "4px 0 0", fontSize: 22 }}>{c.subject ?? "Solicitud"}</h2>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            {c.ai.calls > 0 && <span style={S.aiChip}>🤖 {c.ai.calls} AI · {c.ai.tokens.toLocaleString()} tok · ${c.ai.cost.toFixed(4)}</span>}
+            {c.ai.calls > 0 && <span style={S.aiChip}>🤖 {c.ai.calls} IA · {c.ai.tokens.toLocaleString()} tok · ${c.ai.cost.toFixed(4)}</span>}
             <span style={{ ...S.outcome, background: oc.bg, color: oc.fg }}>{c.outcomeLabel}</span>
           </div>
         </div>
         {c.status === "failed" && (
-          <div style={S.failBox}>⚠ This run failed. <button style={S.retryBtn} disabled={busy} onClick={() => retry(c.instanceId)}>{busy ? "Retrying…" : "↻ Retry"}</button></div>
+          <div style={S.failBox}>⚠ Esta ejecución falló. <button style={S.retryBtn} disabled={busy} onClick={() => retry(c.instanceId)}>{busy ? "Reintentando…" : "↻ Reintentar"}</button></div>
         )}
 
         <div style={S.timeline}>
@@ -107,7 +108,7 @@ export function Monitor() {
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text-faint)", whiteSpace: "nowrap" }}>{s.ts ? new Date(s.ts).toLocaleString() : ""}</div>
                   </div>
-                  {s.actor && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>by <b>{s.actor}</b></div>}
+                  {s.actor && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>por <b>{s.actor}</b></div>}
                   {s.detail && <div style={{ fontSize: 13, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>{s.detail}</div>}
                   {s.fields && s.fields.length > 0 && (
                     <div style={S.fieldGrid}>{s.fields.map((f, j) => (<div key={j}><span style={S.fk}>{f.label}</span><span style={S.fv}>{f.value}</span></div>))}</div>
@@ -122,23 +123,23 @@ export function Monitor() {
         </div>
 
         <div style={S.card}>
-          <div style={S.h}>Comments</div>
+          <div style={S.h}>Comentarios</div>
           {c.comments.map((cm, i) => (
             <div key={i} style={S.comment}><div style={{ fontSize: 13 }}>{cm.text}</div><div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}><b>{cm.author}</b> · {new Date(cm.ts).toLocaleString()}</div></div>
           ))}
-          {c.comments.length === 0 && <div style={{ fontSize: 13, color: "var(--text-muted)", margin: "6px 0" }}>No comments yet.</div>}
+          {c.comments.length === 0 && <div style={{ fontSize: 13, color: "var(--text-muted)", margin: "6px 0" }}>Sin comentarios.</div>}
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <input style={S.cInput} placeholder="Add a note…" value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") postComment(); }} />
-            <button style={S.cBtn} onClick={postComment}>Post</button>
+            <input style={S.cInput} placeholder="Agregar un comentario…" value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") postComment(); }} />
+            <button style={S.cBtn} onClick={postComment}>Enviar</button>
           </div>
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <button style={S.techToggle} onClick={() => setTech((t) => !t)}>{tech ? "▾" : "▸"} Technical details</button>
-          <a href="#" onClick={(e) => { e.preventDefault(); downloadCsv(c.instanceId); }} style={S.csv}>⬇ audit CSV</a>
+          <button style={S.techToggle} onClick={() => setTech((t) => !t)}>{tech ? "▾" : "▸"} Detalle técnico</button>
+          <a href="#" onClick={(e) => { e.preventDefault(); downloadCsv(c.instanceId); }} style={S.csv}>⬇ auditoría CSV</a>
           {tech && (
             <div style={S.card}>
-              <div style={S.h}>Case data</div>
+              <div style={S.h}>Datos del caso</div>
               <div style={S.fieldGrid}>{c.data.map((f, i) => (<div key={i}><span style={S.fk}>{f.label}</span><span style={S.fv}>{f.value}</span></div>))}</div>
             </div>
           )}
@@ -155,19 +156,19 @@ export function Monitor() {
   return (
     <div style={{ border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)", overflow: "hidden" }}>
       <div style={S.bar}>
-        <span style={S.h}>Executions ({shown.length})</span>
+        <span style={S.h}>Ejecuciones ({shown.length})</span>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <input style={S.search} placeholder="Search applicant…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input style={S.search} placeholder="Buscar solicitante…" value={q} onChange={(e) => setQ(e.target.value)} />
           <select value={filter} onChange={(e) => setFilter(e.target.value)} style={S.select}>
-            <option value="all">All workflows</option>
+            <option value="all">Todos los flujos</option>
             {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}><span style={{ width: 8, height: 8, borderRadius: 4, background: "#16a34a" }} /> live</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}><span style={{ width: 8, height: 8, borderRadius: 4, background: "#16a34a" }} /> en vivo</span>
         </div>
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead><tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
-          <th style={S.th}>Applicant</th><th style={S.th}>Workflow</th><th style={S.th}>Outcome</th><th style={S.th}>Status</th><th style={S.th}>Case</th>
+          <th style={S.th}>Solicitante</th><th style={S.th}>Flujo</th><th style={S.th}>Resultado</th><th style={S.th}>Estado</th><th style={S.th}>Caso</th>
         </tr></thead>
         <tbody>
           {shown.map((i) => {
@@ -177,12 +178,12 @@ export function Monitor() {
                 <td style={{ ...S.td, fontWeight: 600 }}>{i.subject ?? <span style={{ color: "var(--text-faint)" }}>—</span>}</td>
                 <td style={S.td}>{i.processName}</td>
                 <td style={S.td}><span style={{ ...S.outcome, background: oc.bg, color: oc.fg }}>{i.outcomeLabel}</span></td>
-                <td style={{ ...S.td, color: "var(--text-muted)" }}>{i.status}</td>
+                <td style={{ ...S.td, color: "var(--text-muted)" }}>{STATUS_ES[i.status] ?? i.status}</td>
                 <td style={{ ...S.td, color: "var(--text-faint)" }}><code>{i.id.slice(0, 8)}</code></td>
               </tr>
             );
           })}
-          {shown.length === 0 && <tr><td style={S.td} colSpan={5}>No executions yet — apply at <code>/banco</code> or run a workflow.</td></tr>}
+          {shown.length === 0 && <tr><td style={S.td} colSpan={5}>Todavía no hay ejecuciones — aplicá en <code>/banco</code> o ejecutá un flujo.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -190,8 +191,8 @@ export function Monitor() {
 }
 
 function badgeColor(b: string): { bg: string; fg: string } {
-  if (/approv|aprob|yes/i.test(b)) return { bg: "#dcfce7", fg: "#166534" };
-  if (/decl|reject|rechaz|review|no/i.test(b)) return { bg: "#fff4e5", fg: "#9a3412" };
+  if (/approv|aprob|yes|sí/i.test(b)) return { bg: "#dcfce7", fg: "#166534" };
+  if (/decl|reject|rechaz|review|revis|no/i.test(b)) return { bg: "#fff4e5", fg: "#9a3412" };
   return { bg: "var(--surface-3)", fg: "var(--text-muted)" };
 }
 
