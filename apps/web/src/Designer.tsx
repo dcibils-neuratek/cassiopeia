@@ -36,6 +36,13 @@ const NODE_UI: Record<string, { color: string }> = {
   subprocess: { color: "#0d9488" },
 };
 
+// Ready-made prompt examples for the "build with AI" empty state.
+const AI_EXAMPLES = [
+  "Alta de cliente: carga de datos, verificación de identidad con IA y aprobación manual si el riesgo es alto.",
+  "Solicitud de crédito: el cliente pide un monto, un agente calcula el score y aprueba al instante o pasa a análisis.",
+  "Aviso de viaje: el cliente informa destino y fechas, se registra en la red de la tarjeta y se confirma.",
+];
+
 // Node palette for the toolbox (Spanish labels + icons + what each node does).
 const TOOLBOX = [
   { type: "userTask", label: "Tarea humana", icon: "👤", color: "#2563eb", help: "Una persona completa un formulario: revisar, aprobar o cargar datos. Aparece en la Bandeja." },
@@ -407,6 +414,8 @@ export function Designer({ defId }: { defId: string }) {
     setTestOut(JSON.stringify(r.data, null, 2));
   }
 
+  // A flow with only Inicio + Fin (no real steps) → show the prompt-to-flow box.
+  const isEmptyFlow = nodes.filter((n) => n.data.node.type !== "start" && n.data.node.type !== "end").length === 0;
   const selNode = sel?.kind === "node" ? nodes.find((n) => n.id === sel.id)?.data.node as ModelNode | undefined : undefined;
   const selEdge = sel?.kind === "edge" ? edges.find((e) => e.id === sel.id) : undefined;
   const selEdgeFromGateway = selEdge && nodes.find((n) => n.id === selEdge.source)?.data.node.type === "gateway";
@@ -456,7 +465,7 @@ export function Designer({ defId }: { defId: string }) {
       </div>
 
       <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        <div style={{ flex: 1, height: "calc(100vh - 250px)", minHeight: 460, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface-2)" }}>
+        <div style={{ position: "relative", flex: 1, height: "calc(100vh - 250px)", minHeight: 460, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface-2)" }}>
           <ReactFlow
             nodes={nodes} edges={edges} nodeTypes={nodeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
@@ -468,6 +477,33 @@ export function Designer({ defId }: { defId: string }) {
             <Background />
             <Controls />
           </ReactFlow>
+
+          {isEmptyFlow && (
+            <div style={S.emptyPromptWrap}>
+              <div style={S.emptyPromptCard}>
+                <div style={{ fontSize: 15, fontWeight: 800 }}>✦ Describí tu proceso y lo armo con IA</div>
+                <p style={{ ...S.hint, margin: "6px 0 0" }}>En lenguaje natural. Genero las tareas, decisiones, conectores y formularios sobre el canvas — después lo ajustás.</p>
+                <textarea
+                  style={S.emptyPromptInput}
+                  placeholder="Ej: Alta de cliente: el cliente carga sus datos, un agente de IA verifica identidad, y si el riesgo es alto lo revisa un analista antes de aprobar."
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); setAiOpen(true); sendAi(); } }}
+                />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 12px" }}>
+                  {AI_EXAMPLES.map((ex) => (
+                    <button key={ex} style={S.exampleChip} onClick={() => setAiInput(ex)}>{ex.length > 44 ? ex.slice(0, 44) + "…" : ex}</button>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button style={S.aiBtn} disabled={aiBusy || !aiInput.trim()} onClick={() => { setAiOpen(true); sendAi(); }}>
+                    {aiBusy ? "Generando…" : "✦ Generar flujo"}
+                  </button>
+                  <span style={S.hint}>o armalo a mano con los nodos de arriba ↑</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {sel && (
@@ -1058,6 +1094,10 @@ const S: Record<string, React.CSSProperties> = {
   menu: { position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 41, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 12px 30px -10px rgba(0,0,0,0.25)", padding: 6, minWidth: 220, display: "flex", flexDirection: "column", gap: 2 },
   menuItem: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, textAlign: "left", border: 0, background: "transparent", borderRadius: 8, padding: "8px 10px", fontSize: 13, cursor: "pointer", color: "var(--text)", whiteSpace: "nowrap" },
   menuHint: { fontSize: 11, color: "var(--text-faint)" },
+  emptyPromptWrap: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, pointerEvents: "none" },
+  emptyPromptCard: { pointerEvents: "auto", width: "100%", maxWidth: 560, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: 22, boxShadow: "0 18px 50px -18px rgba(0,0,0,0.3)" },
+  emptyPromptInput: { width: "100%", boxSizing: "border-box", marginTop: 12, minHeight: 84, border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontSize: 13.5, fontFamily: "inherit", resize: "vertical" },
+  exampleChip: { border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text-muted)", borderRadius: 999, padding: "5px 11px", fontSize: 12, cursor: "pointer", textAlign: "left" },
   h3: { margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b" },
   steps: { margin: 0, paddingLeft: 18, lineHeight: 1.9, fontSize: 13, color: "#334155" },
   hint: { fontSize: 12, color: "#64748b" },

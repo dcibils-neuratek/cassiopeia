@@ -116,8 +116,10 @@ export async function generateWorkflow(
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${cfg.apiKey}` },
     body: JSON.stringify({
+      // No response_format: not all OpenAI-compatible providers accept it
+      // (Anthropic wants json_schema). The system prompt asks for pure JSON and
+      // stripFences()+JSON.parse below handles fenced output.
       model: cfg.model,
-      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM },
         { role: "user", content: userMsg },
