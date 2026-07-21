@@ -5,6 +5,15 @@ import { THEMES, getTheme, setTheme } from "./theme.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
+type TabId = "appearance" | "users" | "model" | "connectors" | "activity";
+const TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: "appearance", label: "Apariencia", icon: "🎨" },
+  { id: "users", label: "Usuarios y acceso", icon: "👥" },
+  { id: "model", label: "Modelo de IA", icon: "✦" },
+  { id: "connectors", label: "Conectores", icon: "🔌" },
+  { id: "activity", label: "Actividad", icon: "🕘" },
+];
+
 export function Settings() {
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [describer, setDescriber] = useState<Connector>({ id: "describer", type: "ai-agent", config: { baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-4-5-20251001", apiKey: "", jsonOutput: false } });
@@ -17,6 +26,7 @@ export function Settings() {
   const [nu, setNu] = useState({ username: "", password: "", displayName: "", role: "operator" });
   const [theme, setThemeState] = useState(getTheme());
   function pickTheme(id: string) { setTheme(id); setThemeState(id); }
+  const [tab, setTab] = useState<TabId>("appearance");
 
   async function reload() {
     const r = await api("/connectors");
@@ -63,7 +73,17 @@ export function Settings() {
 
   return (
     <div style={{ maxWidth: 900 }}>
+      {/* ---- tab bar ---- */}
+      <div style={S.tabBar}>
+        {TABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)} className={tab === t.id ? undefined : "nav-item"} style={tabBtn(tab === t.id)}>
+            <span style={{ fontSize: 14 }}>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+
       {/* ---- Appearance / themes ---- */}
+      {tab === "appearance" && (
       <section style={S.card}>
         <h2 style={S.h2}>Apariencia</h2>
         <p style={S.hint}>Elegí la paleta de colores de toda la app.</p>
@@ -82,9 +102,11 @@ export function Settings() {
           ))}
         </div>
       </section>
+      )}
 
       {/* ---- Users & access ---- */}
-      <section style={{ ...S.card, marginTop: 18 }}>
+      {tab === "users" && (
+      <section style={S.card}>
         <h2 style={S.h2}>Usuarios y acceso</h2>
         <p style={S.hint}>Los roles son jerárquicos: <b>viewer</b> → <b>operator</b> (ejecutar/bandeja) → <b>analyst</b> (diseñar) → <b>admin</b> (ajustes/usuarios).</p>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
@@ -112,9 +134,11 @@ export function Settings() {
           <button style={S.primary} onClick={addUser}>Agregar usuario</button>
         </div>
       </section>
+      )}
 
       {/* ---- LLM keys ---- */}
-      <section style={{ ...S.card, marginTop: 18 }}>
+      {tab === "model" && (
+      <section style={S.card}>
         <h2 style={S.h2}>Modelo de IA de la plataforma (LLM)</h2>
         <p style={S.hint}>Impulsa <b>✦ Describir</b>, <b>✦ Construir con IA</b> y el <b>analista de procesos IA</b>. Por defecto usa Claude vía el endpoint compatible con OpenAI de Anthropic; sirve cualquier proveedor compatible con OpenAI. La clave se guarda <b>encriptada</b> y se muestra enmascarada — dejala en blanco para conservar la almacenada.</p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
@@ -131,9 +155,11 @@ export function Settings() {
           ))}
         </div>
       </section>
+      )}
 
       {/* ---- Connector library ---- */}
-      <section style={{ ...S.card, marginTop: 18 }}>
+      {tab === "connectors" && (
+      <section style={S.card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={S.h2}>Librería de conectores</h2>
           <div style={{ display: "flex", gap: 6 }}>
@@ -217,9 +243,11 @@ export function Settings() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ---- Audit log ---- */}
-      <section style={{ ...S.card, marginTop: 18 }}>
+      {tab === "activity" && (
+      <section style={S.card}>
         <h2 style={S.h2}>Actividad reciente</h2>
         <p style={S.hint}>Quién hizo qué, lo más reciente primero.</p>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, marginTop: 8 }}>
@@ -239,6 +267,7 @@ export function Settings() {
           </tbody>
         </table>
       </section>
+      )}
 
       {msg && <div style={S.ok}>{msg}</div>}
     </div>
@@ -247,7 +276,19 @@ export function Settings() {
 
 function L({ children }: { children: React.ReactNode }) { return <label style={S.label}>{children}</label>; }
 
+function tabBtn(active: boolean): React.CSSProperties {
+  return {
+    display: "flex", alignItems: "center", gap: 7, border: "1px solid",
+    borderColor: active ? "var(--primary)" : "var(--border)",
+    background: active ? "var(--primary-tint)" : "var(--surface)",
+    color: active ? "var(--primary-strong)" : "var(--text-muted)",
+    fontWeight: active ? 700 : 600, fontSize: 13, padding: "8px 14px",
+    borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap",
+  };
+}
+
 const S: Record<string, React.CSSProperties> = {
+  tabBar: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 },
   card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 18, boxShadow: "var(--shadow)" },
   h2: { fontSize: 16, fontWeight: 800, margin: 0 },
   hint: { fontSize: 12, color: "var(--text-muted)", marginTop: 6 },
