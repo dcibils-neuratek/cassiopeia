@@ -296,6 +296,13 @@ app.post("/drafts/remind", async (req, reply) => {
 // credentials. Logs the message and returns ok.
 app.post("/mock-email", async (req) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
+  // Mandrill shape: { key, message:{ to:[{email}], subject } } → reply as a list.
+  if (b.message && typeof b.message === "object") {
+    const m = b.message as { to?: { email?: string }[]; subject?: string };
+    const to = m.to?.[0]?.email;
+    app.log.info(`[mock-email] provider=mandrill to=${to} subject=${m.subject}`);
+    return [{ email: to, status: "sent", _id: `mock-${Date.now()}` }];
+  }
   app.log.info(`[mock-email] to=${b.to} subject=${b.subject}`);
   return { ok: true, id: `mock-${Date.now()}` };
 });

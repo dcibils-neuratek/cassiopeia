@@ -31,8 +31,49 @@ export async function sendEmail(msg: EmailMsg): Promise<void> {
   if (!from) throw new Error("Falta el remitente (from) en la configuración de correo");
 
   if (provider === "resend") return sendResend(cfg, from, msg);
+  if (provider === "mandrill") return sendMandrill(cfg, from, msg);
   if (provider === "http") return sendHttp(cfg, from, msg);
   throw new Error(`Proveedor de correo no soportado: ${provider}`);
+}
+
+/** Split a "Nombre <correo@dominio>" string into name + email. */
+function parseFrom(from: string): { name: string; email: string } {
+  const m = from.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  return m ? { name: m[1], email: m[2].trim() } : { name: "", email: from.trim() };
+}
+
+const MANDRILL_URL = "https://mandrillapp.com/api/1.0/messages/send.json";
+
+// Mandrill REST /messages/send.json — body is { key, message:{…} }. It returns
+// 200 with a per-recipient list even on rejection, so the real outcome is the
+// item's `status` (sent/queued/scheduled = ok; rejected/invalid = failure).
+async function sendMandrill(cfg: Record<string, unknown>, from: string, msg: EmailMsg): Promise<void> {
+  const apiKey = String(cfg.apiKey ?? "");
+  if (!apiKey) throw new Error("Falta la API key de Mandrill");
+  const f = parseFrom(from);
+  const body = {
+    key: apiKey,
+    message: {
+      from_email: f.email,
+      from_name: f.name || undefined,
+      to: [{ email: msg.to, type: "to" }],
+      subject: msg.subject,
+      html: msg.html,
+    },
+  };
+  let res: Response;
+  try {
+    res = await fetch(MANDRILL_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  } catch (err) {
+    throw new Error(`Mandrill no disponible: ${(err as Error).message}`);
+  }
+  if (!res.ok) throw new Error(`Mandrill HTTP ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  const data = await res.json().catch(() => null);
+  if (!Array.isArray(data) || data.length === 0) throw new Error("Mandrill: respuesta vacía o inesperada");
+  const first = data[0] as { status?: string; reject_reason?: string; _id?: string };
+  if (first.status === "rejected" || first.status === "invalid") {
+    throw new Error(`Mandrill rechazó el envío: ${first.reject_reason || first.status}`);
+  }
 }
 
 async function sendResend(cfg: Record<string, unknown>, from: string, msg: EmailMsg): Promise<void> {

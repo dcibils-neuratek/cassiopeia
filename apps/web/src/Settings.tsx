@@ -148,11 +148,12 @@ export function Settings() {
       {tab === "mail" && (
       <section style={S.card}>
         <h2 style={S.h2}>Correo saliente</h2>
-        <p style={S.hint}>Se usa para enviar recordatorios a clientes que dejaron una solicitud <b>sin completar</b>. Neutral al proveedor: <b>Resend</b> por defecto, o <b>HTTP</b> para apuntar al sistema de correo del banco. La clave se guarda <b>encriptada</b> — dejala en blanco para conservar la almacenada.</p>
+        <p style={S.hint}>Se usa para enviar recordatorios a clientes que dejaron una solicitud <b>sin completar</b>. Neutral al proveedor: <b>Mandrill</b>, <b>Resend</b>, o <b>HTTP</b> para apuntar al sistema de correo del banco. La clave se guarda <b>encriptada</b> — dejala en blanco para conservar la almacenada.</p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
           <div style={{ flex: "1 1 140px" }}><L>Proveedor</L>
             <select style={S.input} value={mailer.config.provider ?? "resend"} onChange={(e) => setMailer({ ...mailer, config: { ...mailer.config, provider: e.target.value } })}>
               <option value="resend">Resend</option>
+              <option value="mandrill">Mandrill</option>
               <option value="http">HTTP (sistema del banco)</option>
             </select>
           </div>
