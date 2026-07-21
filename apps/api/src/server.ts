@@ -644,6 +644,32 @@ app.delete("/connectors/:id", async (req, reply) => {
   return { ok: true };
 });
 
+// Where is this integration used? Powers the "used by" banner in Integraciones
+// so you know if deleting it breaks a flow.
+app.get("/connectors/:id/usage", async (req, reply) => {
+  if (!requireCap(req, reply, "read")) return;
+  const { id } = req.params as { id: string };
+  const flows: { defId: string; name: string; nodes: string[] }[] = [];
+  for (const d of listDefinitions()) {
+    try {
+      const def = getEditableDefinition(d.id);
+      if (!def) continue;
+      const nodes = def.nodes
+        .filter((n) => n.type === "serviceTask" && (n as { connectorId?: string }).connectorId === id)
+        .map((n) => (n as { name?: string }).name || n.id);
+      if (nodes.length) flows.push({ defId: def.id, name: def.name, nodes });
+    } catch { /* skip broken defs */ }
+  }
+  const agents: string[] = [];
+  for (const c of listConnectors()) {
+    if (c.id === id) continue;
+    if (((c.config.tools as { connector?: string }[]) ?? []).some((t) => t.connector === id)) {
+      agents.push((c.config.label as string)?.trim() || c.id);
+    }
+  }
+  return { flows, agents };
+});
+
 // Test a connector with sample input (used by the admin "Test" button).
 app.post("/connectors/:id/test", async (req, reply) => {
   if (!requireCap(req, reply, "build")) return;

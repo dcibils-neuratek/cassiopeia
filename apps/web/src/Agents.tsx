@@ -33,6 +33,7 @@ const CLAUDE_MODELS: [string, string][] = [["Haiku", "claude-haiku-4-5-20251001"
 export function Agents() {
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
+  const [usage, setUsage] = useState<{ flows: { defId: string; name: string; nodes: string[] }[]; agents: string[] } | null>(null);
   const [msg, setMsg] = useState("");
   const [testInput, setTestInput] = useState('{ "income": 1200 }');
   const [testOut, setTestOut] = useState("");
@@ -47,6 +48,11 @@ export function Agents() {
     }
   }
   useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    if (!selId) { setUsage(null); return; }
+    setUsage(null);
+    api(`/connectors/${selId}/usage`).then((r) => { if (r.ok) setUsage(r.data); });
+  }, [selId]);
 
   const sel = connectors.find((c) => c.id === selId);
   const setCfg = (id: string, k: string, v: any) => setConnectors((cs) => cs.map((c) => (c.id === id ? { ...c, config: { ...c.config, [k]: v } } : c)));
@@ -144,6 +150,20 @@ export function Agents() {
               </div>
             </div>
             <p style={S.hint}>Una conexión reutilizable a un sistema. Solo las <b>publicadas</b> aparecen en el diseñador de flujos. La clave se guarda encriptada — dejala en blanco para conservarla.</p>
+
+            {usage && (usage.flows.length > 0 || usage.agents.length > 0) ? (
+              <div style={S.usedBanner}>
+                <b>En uso</b> — eliminarla o despublicarla rompería estos pasos:
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                  {usage.flows.map((f) => (
+                    <li key={f.defId}><b>{f.name}</b> <span style={{ color: "var(--text-muted)" }}>· {f.nodes.join(", ")}</span></li>
+                  ))}
+                  {usage.agents.length > 0 && <li>Agentes que la llaman como herramienta: {usage.agents.join(", ")}</li>}
+                </ul>
+              </div>
+            ) : usage ? (
+              <div style={S.freeBanner}>No está en uso en ningún flujo — se puede eliminar sin afectar nada.</div>
+            ) : null}
 
             {sel.type === "ai-agent" && <>
               <div style={{ display: "flex", gap: 6, margin: "10px 0 2px", alignItems: "center", flexWrap: "wrap" }}>
@@ -279,4 +299,6 @@ const S: Record<string, React.CSSProperties> = {
   chipActive: { border: "1px solid var(--primary)", background: "var(--primary-tint)", color: "var(--primary-strong)" },
   pre: { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, fontSize: 12, overflowX: "auto", marginTop: 10 },
   codeInline: { fontFamily: "ui-monospace, monospace", fontSize: 11.5, background: "var(--surface-3)", padding: "1px 5px", borderRadius: 4 },
+  usedBanner: { background: "#fff4e5", color: "#92400e", border: "1px solid #fde3c2", borderRadius: 10, padding: "10px 12px", fontSize: 13, marginTop: 10 },
+  freeBanner: { background: "#ecfdf5", color: "#166534", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 12px", fontSize: 13, marginTop: 10 },
 };
