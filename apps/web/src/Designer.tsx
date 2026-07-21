@@ -128,6 +128,7 @@ export function Designer({ defId }: { defId: string }) {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [newSchedMin, setNewSchedMin] = useState(60);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   async function reloadForms() {
     const r = await api(`/forms`);
@@ -415,39 +416,47 @@ export function Designer({ defId }: { defId: string }) {
       <div style={S.toolbar}>
         <input style={S.nameInput} value={name} onChange={(e) => setName(e.target.value)} />
         <div style={{ flex: 1 }} />
+        {/* AI group */}
         <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Construir con IA</button>
         <button style={S.describe} onClick={openDescribe}>✦ Describir</button>
-        <button style={S.ghost} onClick={autoLayout} title="Ordenar el diagrama">⤢ Ordenar</button>
-        <button style={S.ghost} onClick={openGov}>Gestionar</button>
-        <button style={S.ghost} onClick={exportWorkflow}>Exportar</button>
-        <button style={S.ghost} onClick={() => setHelpOpen(true)} title="Ayuda">? Ayuda</button>
+        {/* Secondary actions in a compact menu */}
+        <div style={{ position: "relative" }}>
+          <button style={S.ghost} onClick={() => setMoreOpen((v) => !v)}>⋯ Más</button>
+          {moreOpen && (
+            <>
+              <div style={S.menuBackdrop} onClick={() => setMoreOpen(false)} />
+              <div style={S.menu}>
+                <button style={S.menuItem} onClick={() => { setMoreOpen(false); openGov(); }}>⚙ Gestionar <span style={S.menuHint}>versiones, API, importar</span></button>
+                <button style={S.menuItem} onClick={() => { setMoreOpen(false); autoLayout(); }}>⤢ Ordenar diagrama</button>
+                <button style={S.menuItem} onClick={() => { setMoreOpen(false); exportWorkflow(); }}>⬇ Exportar</button>
+                <button style={S.menuItem} onClick={() => { setMoreOpen(false); setHelpOpen(true); }}>? Ayuda</button>
+              </div>
+            </>
+          )}
+        </div>
+        <span style={S.toolbarSep} />
+        {/* Primary lifecycle actions */}
         <button style={S.ghost} onClick={() => persist(false)}>Guardar borrador</button>
         <button style={S.ghost} onClick={() => persist(true)}>Publicar</button>
-        <button style={S.run} onClick={publishAndRun}>▶ Ejecutar</button>
+        <button style={S.run} onClick={publishAndRun} title="Publica el flujo y lo abre para probarlo de punta a punta">▶ Ejecutar</button>
       </div>
 
       {msg && <div style={S.okBar}>{msg}</div>}
       {errors.length > 0 && <div style={S.errBar}>{errors.map((e, i) => <div key={i}>• {e}</div>)}</div>}
 
-      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        {/* ---- node toolbox ---- */}
-        <div style={S.toolbox}>
-          <div className="eyebrow" style={{ padding: "2px 4px 8px" }}>Nodos</div>
-          {TOOLBOX.map((n) => (
-            <button key={n.type} className="nav-item tool-row" style={S.toolItem} onClick={() => addNode(n.type as any)}>
-              <span style={{ ...S.toolDot, background: n.color }}>{n.icon}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{n.label}</span>
-              <span style={S.infoDot} aria-hidden>i</span>
-              <span className="tool-tip">
-                <b style={{ display: "block", marginBottom: 3 }}>{n.label}</b>
-                {n.help}
-              </span>
-            </button>
-          ))}
-          <p style={{ ...S.hint, padding: "6px 4px 0", margin: 0 }}>Pasá el mouse por la <b>i</b> para ver qué hace cada nodo.</p>
-        </div>
+      {/* ---- node toolbox (horizontal, above the canvas) ---- */}
+      <div style={S.toolboxBar}>
+        <span className="eyebrow" style={{ marginRight: 4 }}>Agregar nodo:</span>
+        {TOOLBOX.map((n) => (
+          <button key={n.type} className="tool-row" style={S.toolChip} onClick={() => addNode(n.type as any)} title={n.help}>
+            <span style={{ ...S.toolDot, background: n.color }}>{n.icon}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>{n.label}</span>
+          </button>
+        ))}
+      </div>
 
-        <div style={{ flex: 1, height: "calc(100vh - 210px)", minHeight: 480, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface-2)" }}>
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+        <div style={{ flex: 1, height: "calc(100vh - 250px)", minHeight: 460, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface-2)" }}>
           <ReactFlow
             nodes={nodes} edges={edges} nodeTypes={nodeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
@@ -603,7 +612,7 @@ export function Designer({ defId }: { defId: string }) {
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
               <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 1.8, fontSize: 14 }}>
-                <li>Agregá nodos desde el <b>toolbox</b> de la izquierda.</li>
+                <li>Agregá nodos desde la barra <b>Agregar nodo</b> de arriba.</li>
                 <li>Arrastrá desde el punto derecho de un nodo hasta el siguiente para conectarlos.</li>
                 <li>Hacé click en una <span style={{ color: "#2563eb", fontWeight: 700 }}>Tarea humana</span> para adjuntar y diseñar su formulario.</li>
                 <li>Hacé click en una <span style={{ color: "#7c3aed", fontWeight: 700 }}>Tarea de servicio</span> para elegir y configurar un conector (API o agente IA).</li>
@@ -1026,11 +1035,15 @@ const S: Record<string, React.CSSProperties> = {
   descBox: { marginTop: 16, background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 16, fontSize: 14, color: "#0f172a" },
   okBar: { marginTop: 10, background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13 },
   errBar: { marginTop: 10, background: "#fef2f2", color: "#991b1b", padding: "8px 12px", borderRadius: 8, fontSize: 13 },
-  panel: { width: 320, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--surface)", color: "var(--text)", maxHeight: "calc(100vh - 210px)", minHeight: 480, overflowY: "auto" },
-  toolbox: { width: 168, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 12, padding: 8, background: "var(--surface)", display: "flex", flexDirection: "column", gap: 3, height: "fit-content" },
-  toolItem: { display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", border: 0, background: "transparent", borderRadius: 9, padding: "8px 8px", cursor: "pointer", color: "var(--text)" },
-  toolDot: { width: 26, height: 26, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 13, flexShrink: 0 },
-  infoDot: { width: 16, height: 16, borderRadius: 999, border: "1px solid var(--border-strong)", color: "var(--text-faint)", fontSize: 10, fontWeight: 800, fontStyle: "italic", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "Georgia, serif" },
+  panel: { width: 320, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--surface)", color: "var(--text)", maxHeight: "calc(100vh - 250px)", minHeight: 480, overflowY: "auto" },
+  toolboxBar: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 12, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)" },
+  toolChip: { display: "inline-flex", alignItems: "center", gap: 7, border: "1px solid var(--border-strong)", background: "var(--surface)", borderRadius: 999, padding: "5px 11px 5px 6px", cursor: "pointer", color: "var(--text)" },
+  toolDot: { width: 22, height: 22, borderRadius: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, flexShrink: 0 },
+  toolbarSep: { width: 1, height: 24, background: "var(--border)", margin: "0 4px" },
+  menuBackdrop: { position: "fixed", inset: 0, zIndex: 40 },
+  menu: { position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 41, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 12px 30px -10px rgba(0,0,0,0.25)", padding: 6, minWidth: 220, display: "flex", flexDirection: "column", gap: 2 },
+  menuItem: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, textAlign: "left", border: 0, background: "transparent", borderRadius: 8, padding: "8px 10px", fontSize: 13, cursor: "pointer", color: "var(--text)", whiteSpace: "nowrap" },
+  menuHint: { fontSize: 11, color: "var(--text-faint)" },
   h3: { margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b" },
   steps: { margin: 0, paddingLeft: 18, lineHeight: 1.9, fontSize: 13, color: "#334155" },
   hint: { fontSize: 12, color: "#64748b" },
