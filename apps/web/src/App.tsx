@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Designer } from "./Designer.js";
 import { Portal } from "./Portal.js";
 import { Monitor } from "./Monitor.js";
 import { Templates } from "./Templates.js";
@@ -11,6 +10,7 @@ import { Agents } from "./Agents.js";
 import { Inbox } from "./Inbox.js";
 import { Drafts } from "./Drafts.js";
 import { Audit } from "./Audit.js";
+import { FlowsWorkspace } from "./FlowsWorkspace.js";
 import { Login, type CurrentUser } from "./Login.js";
 import { api, getToken, setToken } from "./api.js";
 import { t } from "./i18n.js";
@@ -83,7 +83,7 @@ export function App() {
   if (!user) return <Login onLogin={setUser} />;
 
   const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((m) => canSee(user.role, m)) })).filter((g) => g.items.length);
-  const showPicker = mode === "build" || mode === "run";
+  const showPicker = mode === "run"; // build has its own flow list now
 
   return (
     <div style={S.shell}>
@@ -156,7 +156,7 @@ export function App() {
           {mode === "home" && <Home user={user} onOpen={openWorkflow} onTemplates={() => setMode("templates")} onInbox={() => setMode("inbox")} onDelete={canSee(user.role, "settings") ? deleteWorkflow : undefined} />}
           {mode === "stats" && <Stats />}
           {mode === "templates" && <Templates onUse={useTemplate} />}
-          {mode === "build" && <Designer key={defId} defId={defId} />}
+          {mode === "build" && <FlowsWorkspace defId={defId} onSelect={setDefId} />}
           {mode === "forms" && <Forms />}
           {mode === "agents" && <Agents />}
           {mode === "run" && <Portal key={defId} defId={defId} />}
