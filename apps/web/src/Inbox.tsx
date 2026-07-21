@@ -93,27 +93,27 @@ export function Inbox({ me }: { me: string }) {
             </select>
           </div>
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
-              <th style={S.th}>Tarea</th><th style={S.th}>Flujo</th><th style={S.th}>Prioridad</th><th style={S.th}>Asignado</th><th style={S.th}>Vence</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((t) => (
-              <tr key={t.id} onClick={() => setSel(t)} style={{ cursor: "pointer", borderTop: "1px solid var(--border)", background: sel?.id === t.id ? "var(--primary-tint)" : "var(--surface)" }}>
-                <td style={S.td}>{t.nodeName}</td>
-                <td style={S.td}>{t.processName}</td>
-                <td style={S.td}><span style={{ color: PRIO_COLOR[t.priority ?? "normal"], fontWeight: 700 }}>{PRIO_ES[t.priority ?? "normal"]}</span></td>
-                <td style={S.td}>{t.assignee || <span style={{ color: "#94a3b8" }}>sin asignar</span>}</td>
-                <td style={{ ...S.td, color: overdue(t) ? "#dc2626" : "var(--text)", fontWeight: overdue(t) ? 700 : 400 }}>
-                  {t.dueAt ? (overdue(t) ? "⚠ " : "") + new Date(t.dueAt).toLocaleString() : "—"}
-                </td>
-              </tr>
-            ))}
-            {shown.length === 0 && <tr><td style={S.td} colSpan={5}>No hay tareas abiertas{mineOnly ? " asignadas a vos" : ""}.</td></tr>}
-          </tbody>
-        </table>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12 }}>
+          {shown.map((t) => {
+            const active = sel?.id === t.id;
+            const prio = t.priority ?? "normal";
+            return (
+              <button key={t.id} onClick={() => setSel(t)} className="hoverable"
+                style={{ textAlign: "left", cursor: "pointer", padding: "12px 14px", borderRadius: 11, background: active ? "var(--primary-tint)" : "var(--surface-2)", border: active ? "1.5px solid var(--primary)" : "1px solid var(--border)", borderLeft: `4px solid ${PRIO_COLOR[prio]}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{t.nodeName}</span>
+                  <span style={{ ...S.prioPill, background: PRIO_COLOR[prio] + "22", color: PRIO_COLOR[prio] }}>{PRIO_ES[prio]}</span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{t.processName}</div>
+                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 12, flexWrap: "wrap" }}>
+                  <span style={{ color: "var(--text-muted)" }}>{t.assignee ? `👤 ${t.assignee}` : "sin asignar"}</span>
+                  {t.dueAt && <span style={{ color: overdue(t) ? "#dc2626" : "var(--text-muted)", fontWeight: overdue(t) ? 700 : 400 }}>{overdue(t) ? "⚠ vencida" : "🕓 vence"} {new Date(t.dueAt).toLocaleDateString()}</span>}
+                </div>
+              </button>
+            );
+          })}
+          {shown.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>No hay tareas abiertas{mineOnly ? " asignadas a vos" : ""}.</div>}
+        </div>
       </div>
 
       <div style={{ width: 420, border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--surface)" }}>
@@ -163,7 +163,8 @@ const S: Record<string, React.CSSProperties> = {
   youInput: { border: "1px solid var(--border)", borderRadius: 6, padding: "3px 6px", fontSize: 12, width: 80 },
   th: { padding: "8px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 },
   td: { padding: "8px 12px", color: "var(--text)" },
-  tag: { fontSize: 11, background: "#f1f5f9", borderRadius: 6, padding: "3px 7px", color: "var(--text-muted)" },
+  tag: { fontSize: 11, background: "var(--surface-3)", borderRadius: 6, padding: "3px 7px", color: "var(--text-muted)" },
+  prioPill: { fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: "2px 9px", textTransform: "uppercase", letterSpacing: 0.3 },
   claim: { background: "var(--primary)", color: "white", border: 0, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   reassignInput: { border: "1px solid var(--border-strong)", borderRadius: 8, padding: "6px 9px", fontSize: 12, width: 120 },
   reassignBtn: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" },

@@ -35,6 +35,21 @@ const NODE_UI: Record<string, { color: string }> = {
   subprocess: { color: "#0d9488" },
 };
 
+// Node palette for the toolbox (Spanish labels + icons).
+const TOOLBOX = [
+  { type: "userTask", label: "Tarea humana", icon: "👤", color: "#2563eb" },
+  { type: "serviceTask", label: "Tarea de servicio", icon: "⚙", color: "#7c3aed" },
+  { type: "gateway", label: "Decisión", icon: "⑃", color: "#d97706" },
+  { type: "timer", label: "Espera / Timer", icon: "⏱", color: "#0891b2" },
+  { type: "subprocess", label: "Subproceso", icon: "⤷", color: "#0d9488" },
+  { type: "start", label: "Inicio", icon: "▶", color: "#16a34a" },
+  { type: "end", label: "Fin", icon: "■", color: "#64748b" },
+];
+const NODE_TYPE_ES: Record<string, string> = {
+  start: "Inicio", end: "Fin", userTask: "Tarea humana", serviceTask: "Tarea de servicio",
+  gateway: "Decisión", timer: "Espera / Timer", subprocess: "Subproceso",
+};
+
 function label(n: ModelNode): string {
   if (n.type === "start") return "Start";
   if (n.type === "end") return "End";
@@ -62,7 +77,7 @@ function CassNode({ data, selected }: { data: { node: ModelNode }; selected: boo
       }}
     >
       {n.type !== "start" && <Handle type="target" position={Position.Left} />}
-      <div style={{ fontSize: 9, textTransform: "uppercase", color: ui.color, fontWeight: 700, letterSpacing: 0.5 }}>{n.type}</div>
+      <div style={{ fontSize: 9, textTransform: "uppercase", color: ui.color, fontWeight: 700, letterSpacing: 0.5 }}>{NODE_TYPE_ES[n.type] ?? n.type}</div>
       <div style={{ fontSize: 13, color: "#0f172a" }}>{label(n)}</div>
       {sub && <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{sub}</div>}
       {n.type !== "end" && <Handle type="source" position={Position.Right} />}
@@ -110,6 +125,7 @@ export function Designer({ defId }: { defId: string }) {
   const [triggers, setTriggers] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [newSchedMin, setNewSchedMin] = useState(60);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   async function reloadForms() {
     const r = await api(`/forms`);
@@ -383,16 +399,13 @@ export function Designer({ defId }: { defId: string }) {
     <div>
       <div style={S.toolbar}>
         <input style={S.nameInput} value={name} onChange={(e) => setName(e.target.value)} />
-        <span style={{ fontSize: 12, color: "#94a3b8" }}>Agregar:</span>
-        {(["userTask", "serviceTask", "gateway", "timer", "subprocess", "end", "start"] as const).map((t) => (
-          <button key={t} style={S.paletteBtn} onClick={() => addNode(t)}>+ {t}</button>
-        ))}
         <div style={{ flex: 1 }} />
         <button style={S.aiBtn} onClick={() => setAiOpen(true)}>✦ Construir con IA</button>
         <button style={S.describe} onClick={openDescribe}>✦ Describir</button>
         <button style={S.ghost} onClick={autoLayout} title="Ordenar el diagrama">⤢ Ordenar</button>
         <button style={S.ghost} onClick={openGov}>Gestionar</button>
         <button style={S.ghost} onClick={exportWorkflow}>Exportar</button>
+        <button style={S.ghost} onClick={() => setHelpOpen(true)} title="Ayuda">? Ayuda</button>
         <button style={S.ghost} onClick={() => persist(false)}>Guardar borrador</button>
         <button style={S.ghost} onClick={() => persist(true)}>Publicar</button>
         <button style={S.run} onClick={publishAndRun}>▶ Ejecutar</button>
@@ -402,7 +415,18 @@ export function Designer({ defId }: { defId: string }) {
       {errors.length > 0 && <div style={S.errBar}>{errors.map((e, i) => <div key={i}>• {e}</div>)}</div>}
 
       <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        <div style={{ flex: 1, height: "calc(100vh - 250px)", minHeight: 460, border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
+        {/* ---- node toolbox ---- */}
+        <div style={S.toolbox}>
+          <div className="eyebrow" style={{ padding: "2px 4px 8px" }}>Nodos</div>
+          {TOOLBOX.map((n) => (
+            <button key={n.type} className="nav-item" style={S.toolItem} onClick={() => addNode(n.type as any)} title={`Agregar ${n.label}`}>
+              <span style={{ ...S.toolDot, background: n.color }}>{n.icon}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{n.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1, height: "calc(100vh - 210px)", minHeight: 480, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface-2)" }}>
           <ReactFlow
             nodes={nodes} edges={edges} nodeTypes={nodeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
@@ -416,43 +440,30 @@ export function Designer({ defId }: { defId: string }) {
           </ReactFlow>
         </div>
 
+        {sel && (
         <div style={S.panel}>
-          {!sel && (
-            <div>
-              <h3 style={S.h3}>Build your process</h3>
-              <ol style={S.steps}>
-                <li>Add tasks from the <b>Add</b> bar above.</li>
-                <li>Drag from a node's right dot to the next node to connect them.</li>
-                <li>Click a <span style={{ color: "#2563eb", fontWeight: 700 }}>User Task</span> to attach &amp; design its form.</li>
-                <li>Click a <span style={{ color: "#7c3aed", fontWeight: 700 }}>Service Task</span> to pick &amp; configure a connector (API or AI agent).</li>
-                <li>Click an edge out of a <span style={{ color: "#d97706", fontWeight: 700 }}>Gateway</span> to set its condition.</li>
-                <li><b>Publish</b>, then open <b>Run</b> to try it.</li>
-              </ol>
-            </div>
-          )}
-
           {selNode && (
             <div>
-              <h3 style={S.h3}>{selNode.type}</h3>
+              <h3 style={S.h3}>{NODE_TYPE_ES[selNode.type] ?? selNode.type}</h3>
               {selNode.type !== "start" && selNode.type !== "end" && (
                 <>
-                  <L>Name</L>
+                  <L>Nombre</L>
                   <input style={S.input} value={(selNode as any).name} onChange={(e) => updateNode(selNode.id, { name: e.target.value } as any)} />
                 </>
               )}
 
               {selNode.type === "userTask" && (
                 <>
-                  <L>Attached form</L>
+                  <L>Formulario adjunto</L>
                   <select style={S.input} value={selNode.formId ?? ""} onChange={(e) => updateNode(selNode.id, { formId: e.target.value } as any)}>
-                    <option value="">(none)</option>
+                    <option value="">(ninguno)</option>
                     {forms.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
                   </select>
                   <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                     {selNode.formId ? (
-                      <button style={S.primary} onClick={() => setFormDrawerId(selNode.formId!)}>Design this form →</button>
+                      <button style={S.primary} onClick={() => setFormDrawerId(selNode.formId!)}>Diseñar este formulario →</button>
                     ) : (
-                      <button style={S.primary} onClick={() => createFormForTask(selNode)}>Create &amp; design form →</button>
+                      <button style={S.primary} onClick={() => createFormForTask(selNode)}>Crear y diseñar formulario →</button>
                     )}
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -534,30 +545,53 @@ export function Designer({ defId }: { defId: string }) {
                 />
               )}
 
-              {selNode.type === "gateway" && <p style={S.hint}>Set conditions on the edges leaving this gateway (click an edge).</p>}
-              <button style={S.danger} onClick={deleteSelected}>Delete node</button>
+              {selNode.type === "gateway" && <p style={S.hint}>Definí las condiciones en las aristas que salen de esta decisión (hacé click en una arista).</p>}
+              <button style={S.danger} onClick={deleteSelected}>Eliminar nodo</button>
             </div>
           )}
 
           {selEdge && (
             <div>
-              <h3 style={S.h3}>Connection</h3>
+              <h3 style={S.h3}>Conexión</h3>
               <p style={S.hint}>{selEdge.source} → {selEdge.target}</p>
               {selEdgeFromGateway ? (
                 <>
-                  <L>Condition (when)</L>
-                  <input style={S.input} placeholder="e.g. riskScore > 0.7" value={(selEdge.data?.when as string) ?? ""} onChange={(e) => updateEdge(selEdge.id, { when: e.target.value })} disabled={Boolean(selEdge.data?.isDefault)} />
+                  <L>Condición (cuándo)</L>
+                  <input style={S.input} placeholder="ej. riskScore > 0.7" value={(selEdge.data?.when as string) ?? ""} onChange={(e) => updateEdge(selEdge.id, { when: e.target.value })} disabled={Boolean(selEdge.data?.isDefault)} />
                   <label style={S.check}>
                     <input type="checkbox" checked={Boolean(selEdge.data?.isDefault)} onChange={(e) => updateEdge(selEdge.id, { isDefault: e.target.checked }, selEdge.source)} />
-                    Default branch
+                    Rama por defecto
                   </label>
                 </>
-              ) : <p style={S.hint}>Only edges leaving a gateway carry conditions.</p>}
-              <button style={S.danger} onClick={deleteSelected}>Delete edge</button>
+              ) : <p style={S.hint}>Solo las aristas que salen de una decisión llevan condiciones.</p>}
+              <button style={S.danger} onClick={deleteSelected}>Eliminar arista</button>
             </div>
           )}
         </div>
+        )}
       </div>
+
+      {helpOpen && (
+        <>
+          <div style={S.backdrop} onClick={() => setHelpOpen(false)} />
+          <div style={{ ...S.modal, width: "min(560px, 94vw)", height: "auto", maxHeight: "84vh" }}>
+            <div style={S.modalHead}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Cómo construir tu proceso</span>
+              <button style={S.ghost} onClick={() => setHelpOpen(false)}>Cerrar</button>
+            </div>
+            <div style={{ padding: 20, overflowY: "auto" }}>
+              <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 1.8, fontSize: 14 }}>
+                <li>Agregá nodos desde el <b>toolbox</b> de la izquierda.</li>
+                <li>Arrastrá desde el punto derecho de un nodo hasta el siguiente para conectarlos.</li>
+                <li>Hacé click en una <span style={{ color: "#2563eb", fontWeight: 700 }}>Tarea humana</span> para adjuntar y diseñar su formulario.</li>
+                <li>Hacé click en una <span style={{ color: "#7c3aed", fontWeight: 700 }}>Tarea de servicio</span> para elegir y configurar un conector (API o agente IA).</li>
+                <li>Hacé click en una arista que sale de una <span style={{ color: "#d97706", fontWeight: 700 }}>Decisión</span> para poner su condición.</li>
+                <li><b>Publicá</b>, después abrí <b>Ejecutar</b> para probarlo. Usá <b>⤢ Ordenar</b> para acomodar el diagrama.</li>
+              </ol>
+            </div>
+          </div>
+        </>
+      )}
 
       {formDrawerId && (
         <>
@@ -919,7 +953,10 @@ const S: Record<string, React.CSSProperties> = {
   descBox: { marginTop: 16, background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 16, fontSize: 14, color: "#0f172a" },
   okBar: { marginTop: 10, background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13 },
   errBar: { marginTop: 10, background: "#fef2f2", color: "#991b1b", padding: "8px 12px", borderRadius: 8, fontSize: 13 },
-  panel: { width: 320, border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "white", color: "#0f172a", maxHeight: "calc(100vh - 250px)", minHeight: 460, overflowY: "auto" },
+  panel: { width: 320, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--surface)", color: "var(--text)", maxHeight: "calc(100vh - 210px)", minHeight: 480, overflowY: "auto" },
+  toolbox: { width: 168, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 12, padding: 8, background: "var(--surface)", display: "flex", flexDirection: "column", gap: 3, height: "fit-content" },
+  toolItem: { display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", border: 0, background: "transparent", borderRadius: 9, padding: "8px 8px", cursor: "pointer", color: "var(--text)" },
+  toolDot: { width: 26, height: 26, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 13, flexShrink: 0 },
   h3: { margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b" },
   steps: { margin: 0, paddingLeft: 18, lineHeight: 1.9, fontSize: 13, color: "#334155" },
   hint: { fontSize: 12, color: "#64748b" },
