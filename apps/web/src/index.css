@@ -1,7 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
 
 /* ============================================================================
-   Cassiopeia design system — Manrope + selectable palette themes.
+   Cassiopeia design system — Inter + selectable palette themes.
    Semantic colors, radii and shadows live in :root (shared). Each palette
    (data-theme on <html>) overrides only the neutrals + brand tokens.
    ========================================================================== */
@@ -67,7 +67,7 @@ body {
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
-  font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   font-optical-sizing: auto;
   font-size: 14px;
   line-height: 1.5;
@@ -77,6 +77,19 @@ body {
 
 h1, h2, h3, h4 { letter-spacing: -0.012em; }
 h1 { letter-spacing: -0.02em; }
+
+/* Page titles (topbar heading) — Inter 700, per design spec. */
+.page-title {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-style: normal;
+  font-size: 35px;
+  line-height: 39px;
+  color: rgb(10, 10, 10);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
 
 a { color: var(--primary); text-decoration: none; }
 a:hover { color: var(--primary-hover); }

@@ -13,14 +13,14 @@ const PAGE = `<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Banco del Futuro — Solicitud de préstamo</title>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet" />
 <style>
   :root{
     --brand:#0b3d91; --brand-2:#1e63d0; --accent:#00c2a8; --ink:#0f1b2d; --muted:#5b6b82;
     --line:#e6ebf3; --bg:#f5f8fd; --ok:#16a34a; --bad:#dc2626; --warn:#d97706;
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:Manrope,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{margin:0;font-family:Inter,system-ui,sans-serif;font-optical-sizing:auto;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
   .top{background:linear-gradient(120deg,var(--brand),var(--brand-2));color:#fff}
   .top-inner{max-width:1080px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
   .logo{display:flex;align-items:center;gap:12px;font-weight:800;font-size:18px;letter-spacing:.2px}

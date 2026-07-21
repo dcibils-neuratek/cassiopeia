@@ -132,8 +132,8 @@ export function App() {
       <main style={S.main}>
         <div style={S.topbar}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{t(mode)}</h1>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>{t(mode + "_hint")}</div>
+            <h1 className="page-title">{t(mode)}</h1>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6 }}>{t(mode + "_hint")}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {showPicker && (
