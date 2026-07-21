@@ -277,7 +277,7 @@ const loanUnderwriterForm: FormDefinition = {
   ],
 };
 const loanDef: ProcessDefinition = {
-  id: "loan-preapproval", name: "Loan Pre-Approval", version: 0, status: "draft", startNodeId: "s",
+  id: "loan-preapproval", name: "Pre-aprobación de préstamo", version: 0, status: "draft", startNodeId: "s",
   nodes: [
     { id: "s", type: "start" },
     { id: "apply", type: "userTask", name: "Solicitud de préstamo", formId: "loan-application" },

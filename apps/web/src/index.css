@@ -1,89 +1,59 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap");
 
 /* ============================================================================
-   Cassiopeia design system
-   A refined, professional light theme. Rich tokens + a global "polish layer"
-   (transitions, hover/press feedback, focus rings, elevation, scrollbars) that
-   lifts the whole app on top of component-level inline styles.
+   Cassiopeia design system — Manrope + selectable palette themes.
+   Semantic colors, radii and shadows live in :root (shared). Each palette
+   (data-theme on <html>) overrides only the neutrals + brand tokens.
    ========================================================================== */
 
 :root {
-  /* neutrals — cool slate */
-  --bg: #f6f8fc;
-  --bg-2: #eef1f8;
-  --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #f1f5f9;
-  --border: #e7eaf3;
-  --border-strong: #d3d9e6;
-
-  /* text */
-  --text: #0f1729;
-  --text-muted: #5b6472;
-  --text-faint: #98a2b3;
-
-  /* brand — Neuratek blue */
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-strong: #1e40af;
-  --primary-tint: #e8effe;
-  --primary-tint-2: #dbe6fd;
+  /* ---- shared: semantic, radii, elevation ---- */
+  --success: #16a34a; --success-tint: #e9f7ee;
+  --warn: #d97706; --warn-tint: #fdf0e0;
+  --danger: #dc2626; --danger-tint: #fdeeee;
+  --info: #0891b2; --info-tint: #e7f6fa;
+  --radius-sm: 8px; --radius: 12px; --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 12px -2px rgba(16, 24, 40, 0.08);
+  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.10), 0 12px 24px -6px rgba(16, 24, 40, 0.12);
+  --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, 0.20), 0 4px 8px -4px rgba(16, 24, 40, 0.10);
   --on-primary: #ffffff;
-
-  /* semantic */
-  --success: #16a34a;
-  --success-tint: #dcfce7;
-  --warn: #d97706;
-  --warn-tint: #fff2df;
-  --danger: #dc2626;
-  --danger-tint: #fef2f2;
-  --info: #0891b2;
-  --info-tint: #ecfeff;
-
-  /* focus ring */
-  --ring: 0 0 0 3px rgba(37, 99, 235, 0.28);
-
-  /* radii */
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 16px;
-
-  /* elevation — soft, layered, faintly blue-tinted */
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px -2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.08), 0 12px 24px -6px rgba(16, 24, 40, 0.10);
-  --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, 0.18), 0 4px 8px -4px rgba(16, 24, 40, 0.08);
-
   color-scheme: light;
+
+  /* ---- default palette: "Pizarra & Coral" ---- */
+  --bg: #f4f5f8; --bg-2: #eceef2; --surface: #ffffff; --surface-2: #f7f8fb; --surface-3: #eef0f4;
+  --border: #e3e5ec; --border-strong: #c9ccd6;
+  --text: #2d3142; --text-muted: #4f5d75; --text-faint: #8b93a5;
+  --primary: #ef8354; --primary-hover: #e5713d; --primary-strong: #c85f2f;
+  --primary-tint: #fdeee6; --primary-tint-2: #fbdccb;
+  --ring: 0 0 0 3px rgba(239, 131, 84, 0.30);
 }
 
-/* ---- dark theme (toggled via data-theme on <html>) --------------------- */
-:root[data-theme="dark"] {
-  --bg: #0b1120;
-  --bg-2: #0f172a;
-  --surface: #141d31;
-  --surface-2: #0f1728;
-  --surface-3: #1d2942;
-  --border: #24324f;
-  --border-strong: #37496d;
-  --text: #e7ecf7;
-  --text-muted: #9fb0c9;
-  --text-faint: #6b7c99;
-  --primary: #3b82f6;
-  --primary-hover: #60a5fa;
-  --primary-strong: #93c5fd;
-  --primary-tint: #17233d;
-  --primary-tint-2: #1f3153;
-  --success-tint: #0e2a1a;
-  --warn-tint: #2a1e0a;
-  --danger-tint: #2a1414;
-  --info-tint: #0a2230;
-  --ring: 0 0 0 3px rgba(59, 130, 246, 0.4);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.45), 0 12px 24px -6px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 4px 8px -4px rgba(0, 0, 0, 0.5);
-  color-scheme: dark;
+:root[data-theme="navy"] { /* Marino & Coral */
+  --bg: #f4f6f6; --bg-2: #e9eeee; --surface: #ffffff; --surface-2: #f6f8f8; --surface-3: #e9eeee;
+  --border: #dde3e3; --border-strong: #c2cccc;
+  --text: #102542; --text-muted: #3a4a63; --text-faint: #8794a5;
+  --primary: #f87060; --primary-hover: #f45a48; --primary-strong: #d8493a;
+  --primary-tint: #fdece9; --primary-tint-2: #fbd6d0;
+  --ring: 0 0 0 3px rgba(248, 112, 96, 0.30);
+}
+
+:root[data-theme="charcoal"] { /* Carbón & Teal */
+  --bg: #f4f5f5; --bg-2: #ececec; --surface: #ffffff; --surface-2: #f7f7f7; --surface-3: #ededed;
+  --border: #e1e1e1; --border-strong: #cccccc;
+  --text: #353535; --text-muted: #284b63; --text-faint: #8a8a8a;
+  --primary: #3c6e71; --primary-hover: #335f62; --primary-strong: #284b63;
+  --primary-tint: #e7f0f0; --primary-tint-2: #cfe1e1;
+  --ring: 0 0 0 3px rgba(60, 110, 113, 0.30);
+}
+
+:root[data-theme="ocean"] { /* Océano */
+  --bg: #eef2f9; --bg-2: #e1e5f2; --surface: #ffffff; --surface-2: #f2f6fb; --surface-3: #e5edf8;
+  --border: #d5e2f3; --border-strong: #b9d1ef;
+  --text: #022b3a; --text-muted: #1f5566; --text-faint: #6b8898;
+  --primary: #1f7a8c; --primary-hover: #1a6b7b; --primary-strong: #022b3a;
+  --primary-tint: #e2f0f3; --primary-tint-2: #c5e2e8;
+  --ring: 0 0 0 3px rgba(31, 122, 140, 0.30);
 }
 
 * { box-sizing: border-box; }
@@ -93,16 +63,16 @@ html, body, #root { height: 100%; }
 body {
   margin: 0;
   background:
-    radial-gradient(1200px 600px at 100% -10%, rgba(37, 99, 235, 0.05), transparent 60%),
+    radial-gradient(1200px 600px at 100% -10%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 60%),
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-optical-sizing: auto;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "cv11", "ss01";
 }
 
 h1, h2, h3, h4 { letter-spacing: -0.012em; }

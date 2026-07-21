@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { McpToolPicker } from "./McpToolPicker.js";
+import { THEMES, getTheme, setTheme } from "./theme.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
@@ -14,6 +15,8 @@ export function Settings() {
   const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string }[]>([]);
   const [audit, setAudit] = useState<{ ts: string; actor: string; action: string; target: string | null }[]>([]);
   const [nu, setNu] = useState({ username: "", password: "", displayName: "", role: "operator" });
+  const [theme, setThemeState] = useState(getTheme());
+  function pickTheme(id: string) { setTheme(id); setThemeState(id); }
 
   async function reload() {
     const r = await api("/connectors");
@@ -60,8 +63,28 @@ export function Settings() {
 
   return (
     <div style={{ maxWidth: 900 }}>
-      {/* ---- Users & access ---- */}
+      {/* ---- Appearance / themes ---- */}
       <section style={S.card}>
+        <h2 style={S.h2}>Apariencia</h2>
+        <p style={S.hint}>Elegí la paleta de colores de toda la app.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12, marginTop: 12 }}>
+          {THEMES.map((t) => (
+            <button key={t.id} onClick={() => pickTheme(t.id)}
+              style={{ textAlign: "left", cursor: "pointer", padding: 12, borderRadius: 12, background: "var(--surface)", border: theme === t.id ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: theme === t.id ? "var(--shadow-md)" : "var(--shadow-sm)" }}>
+              <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+                {t.swatch.map((c, i) => <div key={i} style={{ flex: 1, height: 26, borderRadius: 5, background: c, border: "1px solid rgba(0,0,0,0.06)" }} />)}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>{t.name}</span>
+                {theme === t.id && <span style={{ fontSize: 11, color: "var(--primary)", fontWeight: 700 }}>✓ Activo</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ---- Users & access ---- */}
+      <section style={{ ...S.card, marginTop: 18 }}>
         <h2 style={S.h2}>Users &amp; access</h2>
         <p style={S.hint}>Roles are hierarchical: <b>viewer</b> → <b>operator</b> (run/inbox) → <b>analyst</b> (build) → <b>admin</b> (settings/users).</p>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>

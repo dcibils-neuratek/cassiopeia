@@ -47,7 +47,7 @@ export function Login({ onLogin }: { onLogin: (user: CurrentUser) => void }) {
 const S: Record<string, React.CSSProperties> = {
   wrap: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 20 },
   card: { width: "min(400px, 94vw)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 28, boxShadow: "var(--shadow-lg)" },
-  logo: { width: 40, height: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 20, background: "linear-gradient(135deg, #3b82f6, #1e40af)", boxShadow: "0 6px 14px -3px rgba(37,99,235,0.5)" },
+  logo: { width: 40, height: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--on-primary)", fontSize: 20, background: "linear-gradient(135deg, var(--primary), var(--primary-strong))", boxShadow: "var(--shadow-md)" },
   label: { display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginTop: 12, marginBottom: 5 },
   input: { width: "100%", boxSizing: "border-box", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", padding: "10px 12px", fontSize: 14 },
   err: { background: "var(--danger-tint)", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginTop: 14 },

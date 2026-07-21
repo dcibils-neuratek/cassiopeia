@@ -10,6 +10,7 @@ import { Inbox } from "./Inbox.js";
 import { Login, type CurrentUser } from "./Login.js";
 import { api, getToken, setToken } from "./api.js";
 import { t } from "./i18n.js";
+import { applyStoredTheme } from "./theme.js";
 
 type Mode = "home" | "stats" | "templates" | "build" | "run" | "inbox" | "monitor" | "settings";
 type DefSummary = { id: string; name: string };
@@ -49,9 +50,7 @@ export function App() {
   const [defs, setDefs] = useState<DefSummary[]>([]);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">(() => (localStorage.getItem("cass.theme") as "light" | "dark") || "light");
-
-  useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem("cass.theme", theme); } catch { /* ignore */ } }, [theme]);
+  useEffect(() => { applyStoredTheme(); }, []);
 
   // Resolve the current session on load; react to forced logout (401).
   useEffect(() => {
@@ -158,7 +157,6 @@ export function App() {
                 </select>
               </label>
             )}
-            <button onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))} title="Tema" style={S.iconPill}>{theme === "dark" ? "☀" : "☾"}</button>
             <NotificationBell />
           </div>
         </div>
@@ -261,10 +259,10 @@ const S: Record<string, React.CSSProperties> = {
   shell: { display: "flex", minHeight: "100vh", alignItems: "stretch" },
   sidebar: { width: 246, flexShrink: 0, background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", paddingTop: 22, paddingBottom: 16, position: "sticky", top: 0, height: "100vh" },
   brand: { padding: "0 22px 22px" },
-  logoMark: { width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 16, background: "linear-gradient(135deg, #3b82f6, #1e40af)", boxShadow: "0 4px 10px -2px rgba(37,99,235,0.5)", flexShrink: 0 },
+  logoMark: { width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--on-primary)", fontSize: 16, background: "linear-gradient(135deg, var(--primary), var(--primary-strong))", boxShadow: "var(--shadow-md)", flexShrink: 0 },
   poweredBy: { padding: "12px 22px 0", fontSize: 10, letterSpacing: 0.6, color: "var(--text-faint)", fontWeight: 700 },
   userRow: { display: "flex", alignItems: "center", gap: 10, margin: "12px 14px 0", padding: "8px 10px", background: "var(--surface-3)", borderRadius: 10 },
-  avatar: { width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#3b82f6,#1e40af)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 },
+  avatar: { width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg, var(--primary), var(--primary-strong))", color: "var(--on-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 },
   logoutBtn: { background: "transparent", border: "1px solid var(--border-strong)", borderRadius: 8, width: 28, height: 28, cursor: "pointer", color: "var(--text-muted)", fontSize: 14, flexShrink: 0 },
   main: { flex: 1, minWidth: 0, padding: "22px 32px 40px" },
   topbar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, paddingBottom: 18, borderBottom: "1px solid var(--border)" },
