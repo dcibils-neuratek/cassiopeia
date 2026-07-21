@@ -72,6 +72,19 @@ const PAGE = `<!doctype html>
   .ro .k{color:var(--muted)} .ro .v{font-weight:700}
   .foot{max-width:1080px;margin:0 auto;padding:24px;color:#8a99ad;font-size:12px;text-align:center}
   .err{background:#fdeaea;color:#991b1b;border:1px solid #f6caca;border-radius:10px;padding:10px 12px;font-size:13px;margin-top:12px}
+  .steps{display:flex;align-items:center;gap:6px;margin:0 0 22px}
+  .stp{display:flex;align-items:center;gap:8px}
+  .stp .dot{width:26px;height:26px;border-radius:50%;background:#e6ebf3;color:#7c8aa3;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:0 0 auto}
+  .stp .lbl{font-size:13px;color:#7c8aa3;font-weight:600;white-space:nowrap}
+  .stp.active .dot{background:var(--brand-2);color:#fff}
+  .stp.active .lbl{color:var(--ink)}
+  .stp.done .dot{background:var(--ok);color:#fff}
+  .stp.done .lbl{color:var(--ink)}
+  .stp .bar,.sbar{flex:1 1 auto;height:2px;background:#e6ebf3;min-width:12px}
+  .sbar.done{background:var(--ok)}
+  .wnav{display:flex;gap:12px;margin-top:22px}
+  .wnav .btn{margin-top:0}
+  @media(max-width:560px){ .stp .lbl{display:none} }
 </style>
 </head>
 <body>
@@ -93,6 +106,7 @@ const PAGE = `<!doctype html>
   ];
   var app=document.getElementById("app");
   var state={prod:null,appId:null,poll:null};
+  var jr=null; // journey session: {token,appId,step,steps,form,pages,page,data}
   var money=function(n){ if(n==null||isNaN(n))return "—"; return new Intl.NumberFormat("es",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n); };
   function esc(x){return String(x==null?"":x).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}
   document.getElementById("home").addEventListener("click",screenHome);
@@ -100,7 +114,7 @@ const PAGE = `<!doctype html>
   // ---- landing ----
   function screenHome(){
     if(state.poll){clearInterval(state.poll);state.poll=null;}
-    state.prod=null;state.appId=null;
+    state.prod=null;state.appId=null;jr=null;clearHash();
     var cards="";
     for(var i=0;i<PRODUCTS.length;i++){var p=PRODUCTS[i];
       cards+='<div class="prod" data-k="'+p.key+'"><div class="ic">'+p.icon+'</div><h3>'+esc(p.title)+'</h3><p>'+esc(p.tagline)+'</p><div class="go">Empezar →</div></div>';}
@@ -127,7 +141,9 @@ const PAGE = `<!doctype html>
     state.appId=null;
     shell('<div class="center"><div class="spinner"></div></div>');
     fetch("/apply/"+state.prod.token+"/intake").then(function(r){return r.json();}).then(function(res){
-      if(res.ok===false||!res.form)throw new Error(res.error||"Producto no disponible");
+      if(res.ok===false)throw new Error(res.error||"Producto no disponible");
+      if(res.steps){ startJourney(res); return; }        // journey product → wizard
+      if(!res.form)throw new Error("Producto no disponible");
       setCard(formHtml(res.form,{},"Completá tus datos","Empezar →"));
       wireForm(res.form,function(data){ start(data); });
     }).catch(function(e){ setCard(errHtml(e.message)); });
@@ -200,7 +216,7 @@ const PAGE = `<!doctype html>
     setCard('<div class="center"><div class="spinner"></div><span class="badge rev">⏳ En revisión</span><h2 style="margin-top:14px">Un especialista está revisando tu caso</h2><p class="sub">Tu solicitud requiere una revisión adicional. Te mostramos el resultado apenas esté listo — no cierres esta página.</p></div>');
     if(!state.poll){ state.poll=setInterval(function(){ fetch("/apply/"+state.prod.token+"/"+state.appId).then(function(r){return r.json();}).then(function(res){ if(res.stage!=="review"){ clearInterval(state.poll); state.poll=null; route(res); } }).catch(function(){}); },3000); }
   }
-  function screenDone(res){
+  function doneInner(res){
     var s=res.summary||{}, ok=res.outcome!=="declined";
     var rows="";
     var add=function(k,v){ if(v!=null&&v!=="") rows+='<div class="ro"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>'; };
@@ -216,13 +232,115 @@ const PAGE = `<!doctype html>
       ? '<div style="font-size:52px">🎉</div><span class="badge ok">✓ '+esc(res.title||"Listo")+'</span><h2 style="margin-top:14px">¡Todo listo!</h2>'
       : '<span class="badge bad">'+esc(res.title||"No aprobado")+'</span><h2 style="margin-top:14px">No pudimos avanzar</h2>';
     var msg = ok ? '<p class="sub">Tu solicitud fue procesada con éxito.</p>' : '<p class="sub">Según nuestra evaluación, en este momento no podemos avanzar. Podés intentarlo más adelante.</p>';
-    setCard('<div class="center">'+head+msg+'</div>'+(rows?'<div class="offer" style="margin-top:6px"><div style="padding:6px 16px">'+rows+'</div></div>':'')+aiNote(s)+
-      '<button class="btn ghost" id="again" style="max-width:280px;margin:18px auto 0">Volver a productos</button>');
-    var b=document.getElementById("again"); if(b)b.addEventListener("click",screenHome);
+    return '<div class="center">'+head+msg+'</div>'+(rows?'<div class="offer" style="margin-top:6px"><div style="padding:6px 16px">'+rows+'</div></div>':'')+aiNote(s)+
+      '<button class="btn ghost" id="again" style="max-width:280px;margin:18px auto 0">Volver a productos</button>';
   }
+  function bindAgain(){ var b=document.getElementById("again"); if(b)b.addEventListener("click",screenHome); }
+  function screenDone(res){ setCard(doneInner(res)); bindAgain(); }
   function errHtml(msg){ return '<div class="center"><h2>Ups…</h2><p class="sub">'+esc(msg)+'</p><button class="btn ghost" onclick="location.reload()" style="max-width:260px;margin:0 auto">Reintentar</button></div>'; }
 
-  screenHome();
+  // ---- journey wizard (resumable, multi-page; workflow only sees one submit) ----
+  function stepsBar(steps,current){
+    if(!steps||!steps.length)return "";
+    var h='<div class="steps">';
+    for(var i=0;i<steps.length;i++){
+      var cls=i<current?"done":(i===current?"active":"");
+      h+='<div class="stp '+cls+'"><span class="dot">'+(i<current?"✓":(i+1))+'</span><span class="lbl">'+esc(steps[i].label)+'</span></div>';
+      if(i<steps.length-1) h+='<span class="sbar'+(i<current?" done":"")+'"></span>';
+    }
+    return h+'</div>';
+  }
+  function pageFields(page){
+    var out=[],fields=(jr.form.fields)||[];
+    for(var i=0;i<fields.length;i++){ var f=fields[i];
+      if(f.kind==="computed")continue;
+      if(!page.fields||page.fields.indexOf(f.bind)>=0) out.push(f);
+    }
+    return out;
+  }
+  function prefill(fields,data){
+    var el=document.getElementById("f"); if(!el)return;
+    for(var i=0;i<fields.length;i++){ var f=fields[i],node=el.elements[f.bind]; if(!node)continue;
+      var v=data[f.bind]; if(v==null)continue;
+      if(f.kind==="checkbox") node.checked=!!v; else node.value=v;
+    }
+  }
+  function collectPage(fields,validate){
+    var el=document.getElementById("f"); if(!el)return false;
+    if(validate&&el.reportValidity&&!el.reportValidity())return false;
+    for(var i=0;i<fields.length;i++){ var f=fields[i],node=el.elements[f.bind]; if(!node)continue;
+      if(f.kind==="checkbox"){ if(validate&&node.getAttribute&&node.getAttribute("data-req")&&!node.checked){ ferr("Tenés que aceptar para continuar."); return false; } jr.data[f.bind]=!!node.checked; }
+      else { var val=node.value; if(f.kind==="number") val=val===""?null:Number(val); jr.data[f.bind]=val; }
+    }
+    return true;
+  }
+  function saveDraft(){
+    if(!jr)return;
+    fetch("/apply/"+jr.token+"/"+jr.appId+"/draft",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({data:jr.data,page:jr.page})}).catch(function(){});
+  }
+  function startJourney(res){
+    var pages=(res.pages&&res.pages.length)?res.pages:[{label:"",fields:null}];
+    jr={token:state.prod.token,appId:res.appId,step:(res.current!=null?res.current:0),steps:res.steps,form:res.form,pages:pages,page:(res.page!=null?res.page:0),data:res.draft||{}};
+    if(jr.page>=pages.length) jr.page=pages.length-1;
+    state.appId=res.appId; setHash(); renderWizard();
+  }
+  function renderWizard(){
+    var pages=jr.pages,pi=jr.page,page=pages[pi],fs=pageFields(page);
+    var multi=pages.length>1;
+    var heading=multi?(page.label||jr.steps[jr.step].label||"Tus datos"):(jr.steps[jr.step].label||"Tus datos");
+    var sub="Paso "+(jr.step+1)+" de "+jr.steps.length+(multi?" · "+esc(page.label||("Página "+(pi+1)))+" ("+(pi+1)+"/"+pages.length+")":"");
+    var body=""; for(var i=0;i<fs.length;i++) body+=fieldHtml(fs[i],jr.data);
+    var last=pi>=pages.length-1;
+    var nav='<div class="wnav">'+(pi>0?'<button class="btn ghost" type="button" id="prev">Atrás</button>':'')+'<button class="btn" type="submit">'+(last?"Enviar":"Siguiente →")+'</button></div>';
+    setCard(stepsBar(jr.steps,jr.step)+'<h2>'+esc(heading)+'</h2><p class="sub">'+sub+'</p><form id="f" novalidate>'+body+nav+'<div id="ferr"></div></form>');
+    prefill(fs,jr.data);
+    var prev=document.getElementById("prev"); if(prev) prev.addEventListener("click",function(){ collectPage(fs,false); jr.page--; saveDraft(); renderWizard(); });
+    document.getElementById("f").addEventListener("submit",function(e){ e.preventDefault();
+      if(!collectPage(fs,true))return;
+      if(last){ saveDraft(); submitJourney(); } else { jr.page++; saveDraft(); renderWizard(); }
+    });
+  }
+  function submitJourney(){
+    setCard(stepsBar(jr.steps,jr.step)+'<div class="center"><div class="spinner"></div><h2>Enviando…</h2></div>');
+    fetch("/apply/"+jr.token+"/"+jr.appId+"/submit",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(jr.data)})
+      .then(function(r){return r.json();}).then(function(res){ if(res.ok===false)throw new Error(res.error||"Error"); routeJourney(res); })
+      .catch(function(e){ setCard(errHtml(e.message)); });
+  }
+  function routeJourney(res){
+    if(res.substate==="form"){ startJourney(res); return; }
+    var cur=res.current!=null?res.current:1, steps=res.steps||(jr&&jr.steps);
+    if(res.substate==="review"){
+      setCard(stepsBar(steps,cur)+'<div class="center"><div class="spinner"></div><span class="badge rev">⏳ En revisión</span><h2 style="margin-top:12px">Un especialista está revisando tu caso</h2><p class="sub">Tu solicitud necesita una revisión adicional. Podés cerrar y volver a esta página cuando quieras — retomamos donde quedó.</p></div>');
+      if(!state.poll){ state.poll=setInterval(function(){ fetch("/apply/"+jr.token+"/"+jr.appId).then(function(r){return r.json();}).then(function(x){ if(x.substate!=="review"){ clearInterval(state.poll); state.poll=null; routeJourney(x); } }).catch(function(){}); },3000); }
+    } else if(res.substate==="analyzing"||res.stage==="processing"){
+      setCard(stepsBar(steps,cur)+'<div class="center"><div class="spinner"></div><h2>Analizando con IA…</h2><p class="sub">Nuestro agente está evaluando tu caso.</p></div>');
+      setTimeout(function(){ fetch("/apply/"+jr.token+"/"+jr.appId).then(function(r){return r.json();}).then(routeJourney).catch(function(){ setTimeout(function(){routeJourney(res);},2000); }); },1600);
+    } else if(res.substate==="done"||res.stage==="done"){
+      if(state.poll){clearInterval(state.poll);state.poll=null;}
+      setCard(stepsBar(steps,steps?steps.length-1:0)+doneInner(res)); bindAgain();
+    } else {
+      setCard(errHtml(res.message||"No pudimos procesar tu solicitud."));
+    }
+  }
+
+  // ---- resume link (#producto/appId) so a half-filled wizard survives days ----
+  function setHash(){ try{ history.replaceState(null,"","#"+state.prod.key+"/"+jr.appId); }catch(e){ location.hash="#"+state.prod.key+"/"+jr.appId; } }
+  function clearHash(){ try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){} }
+  function resume(key,appId){
+    for(var i=0;i<PRODUCTS.length;i++) if(PRODUCTS[i].key===key) state.prod=PRODUCTS[i];
+    if(!state.prod){ screenHome(); return; }
+    state.appId=appId;
+    shell('<div class="center"><div class="spinner"></div></div>');
+    fetch("/apply/"+state.prod.token+"/"+appId).then(function(r){return r.json();}).then(function(res){
+      if(res.ok===false)throw new Error(res.error||"No encontramos tu solicitud");
+      if(res.steps){ routeJourney(res); } else { route(res); }
+    }).catch(function(e){ setCard(errHtml(e.message)); });
+  }
+  function boot(){
+    var h=(location.hash||"").replace(/^#/,""); var m=h.split("/");
+    if(m.length===2&&m[0]&&m[1]){ resume(m[0],m[1]); } else { screenHome(); }
+  }
+  boot();
 })();
 </script>
 </body>
