@@ -663,7 +663,7 @@ export function Designer({ defId }: { defId: string }) {
               <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                 {(["versions", "data", "automation", "import"] as const).map((t) => (
                   <button key={t} onClick={() => setGovTab(t)} style={govTab === t ? S.tabActive : S.tab}>
-                    {t === "versions" ? "Historial de versiones" : t === "data" ? "Diccionario de datos" : t === "automation" ? "Automatización" : "Importar"}
+                    {t === "versions" ? "Historial de versiones" : t === "data" ? "Diccionario de datos" : t === "automation" ? "API y disparadores" : "Importar"}
                   </button>
                 ))}
               </div>
@@ -709,16 +709,28 @@ export function Designer({ defId }: { defId: string }) {
 
               {govTab === "automation" && (
                 <>
-                  <div className="eyebrow" style={{ marginBottom: 4 }}>Disparadores webhook</div>
-                  <p style={S.hint}>Hacé un POST de JSON a la URL del disparador para iniciar este flujo — el cuerpo se vuelve el contexto inicial. No requiere login (el token lo autoriza). Crear un disparador necesita permisos de admin.</p>
-                  {triggers.map((t) => (
-                    <div key={t.token} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                      <input readOnly style={{ ...S.input, flex: 1, fontFamily: "monospace", fontSize: 11 }} value={`${location.origin}/api/hooks/${t.token}`} onFocus={(e) => e.currentTarget.select()} />
-                      <span style={S.hint}>{t.label}</span>
-                      <button style={S.ghost} onClick={() => delTrigger(t.token)}>✕</button>
-                    </div>
-                  ))}
-                  <button style={S.ghost} onClick={addTrigger}>+ Disparador webhook</button>
+                  <div className="eyebrow" style={{ marginBottom: 4 }}>Invocar por API (webhook)</div>
+                  <p style={S.hint}>Para iniciar este flujo desde otra app, hacé un <b>POST</b> con un JSON a la URL del disparador — el cuerpo se vuelve el <b>contexto inicial</b> del proceso (los campos que después usan formularios, gateways y agentes). No requiere login: el <b>token</b> de la URL lo autoriza. Cada URL es un endpoint independiente.</p>
+                  {triggers.length === 0 && <p style={S.hint}>Todavía no hay ninguna URL de API para este flujo.</p>}
+                  {triggers.map((t) => {
+                    const url = `${location.origin}/api/hooks/${t.token}`;
+                    const curl = `curl -X POST ${url} \\\n  -H 'content-type: application/json' \\\n  -d '{ "fullName": "Juan Pérez", "monthlyIncome": 4500 }'`;
+                    return (
+                      <div key={t.token} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10, marginBottom: 8, background: "var(--surface-2)" }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input readOnly style={{ ...S.input, flex: 1, fontFamily: "monospace", fontSize: 11 }} value={url} onFocus={(e) => e.currentTarget.select()} />
+                          <button style={S.ghost} onClick={() => navigator.clipboard?.writeText(url)}>Copiar URL</button>
+                          <button style={S.ghost} title="Eliminar esta URL" onClick={() => delTrigger(t.token)}>✕</button>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0 4px" }}>
+                          <span style={S.hint}>Ejemplo · <b>token:</b> <code style={{ fontFamily: "monospace" }}>{t.token}</code> {t.label ? `· ${t.label}` : ""}</span>
+                          <button style={S.ghost} onClick={() => navigator.clipboard?.writeText(curl)}>Copiar curl</button>
+                        </div>
+                        <pre style={{ ...S.pre, margin: 0, whiteSpace: "pre-wrap", fontSize: 11.5 }}>{curl}</pre>
+                      </div>
+                    );
+                  })}
+                  <button style={S.primary} onClick={addTrigger}>+ Crear URL de API</button>
 
                   <div className="eyebrow" style={{ margin: "16px 0 4px" }}>Programaciones</div>
                   <p style={S.hint}>Iniciá este flujo automáticamente cada cierto intervalo.</p>
