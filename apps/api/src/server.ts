@@ -41,6 +41,8 @@ import {
   listInstances,
   listOpenTasks,
   listUsers,
+  updateUserArea,
+  renameQueue,
   type UserRow,
   maxPublishedVersion,
   openTaskForInstance,
@@ -78,9 +80,15 @@ try {
   try { getDefinition("loan-preapproval"); hasLoan = true; } catch { hasLoan = false; }
   if (!hasLoan) installTemplate("loan-preapproval");
   ensurePublicTrigger("banco-del-futuro-loan", "loan-preapproval", "Banco del Futuro — public loan form");
-  if (!getUserByUsername("officer")) {
-    registerUser("officer", "officer", "Banco del Futuro — Mesa de Crédito", "operator");
-    console.warn("[demo] Seeded bank officer (officer/officer) for the Inbox.");
+  // Normalize the loan review queue to a friendly area name so it lines up with
+  // the bank officer's area (idempotent: no-op once already renamed).
+  renameQueue("underwriter", "creditos");
+  const officer = getUserByUsername("officer");
+  if (!officer) {
+    registerUser("officer", "officer", "Banco del Futuro — Mesa de Crédito", "operator", "creditos");
+    console.warn("[demo] Seeded bank officer (officer/officer, área creditos) for the Inbox.");
+  } else if (!officer.area) {
+    updateUserArea("officer", "creditos");
   }
 } catch (err) { app.log.warn(`demo seed skipped: ${(err as Error).message}`); }
 
@@ -120,6 +128,20 @@ function requireCap(req: unknown, reply: import("fastify").FastifyReply, cap: Ca
   return user;
 }
 
+/**
+ * Which open tasks a user may see in their Inbox.
+ * - analyst/admin (build capability): everything.
+ * - operator/viewer: only tasks assigned to them, or tasks routed to their
+ *   business area (node candidateRole === user.area). Tasks with no area stay
+ *   with builders until routed/assigned.
+ */
+function taskVisibleTo(t: { assignee?: string | null; role?: string | null }, user: UserRow): boolean {
+  if (can(user.role, "build")) return true;
+  if (t.assignee === user.username) return true;
+  const area = (user.area ?? "").trim();
+  return !!area && t.role === area;
+}
+
 // ---- auth endpoints ----
 app.post("/auth/login", async (req, reply) => {
   const { username, password } = (req.body ?? {}) as { username?: string; password?: string };
@@ -138,7 +160,7 @@ app.post("/auth/logout", async (req) => {
 
 app.get("/auth/me", async (req) => {
   const u = actor(req);
-  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role };
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, area: u.area ?? null };
 });
 
 app.get("/auth/users", async (req, reply) => {
@@ -149,10 +171,10 @@ app.get("/auth/users", async (req, reply) => {
 app.post("/auth/users", async (req, reply) => {
   const admin = requireCap(req, reply, "admin");
   if (!admin) return;
-  const b = (req.body ?? {}) as { username?: string; password?: string; displayName?: string; role?: string };
+  const b = (req.body ?? {}) as { username?: string; password?: string; displayName?: string; role?: string; area?: string };
   if (!ALL_ROLES.includes(b.role as never)) return reply.code(400).send({ ok: false, error: "Invalid role" });
   try {
-    const u = registerUser(b.username ?? "", b.password ?? "", b.displayName ?? "", b.role as never);
+    const u = registerUser(b.username ?? "", b.password ?? "", b.displayName ?? "", b.role as never, b.area);
     addAudit(admin.username, "user.create", u.username);
     return { ok: true, user: u };
   } catch (err) {
@@ -715,9 +737,11 @@ app.post("/instances/:id/retry", async (req, reply) => {
 
 // The worklist: every open user task across all instances, enriched with the
 // process/node/form names and its instance context so the Inbox can render it.
-app.get("/tasks", async () => {
+app.get("/tasks", async (req) => {
+  const me = actor(req);
   const rank: Record<string, number> = { high: 0, normal: 1, low: 2 };
   return listOpenTasks()
+    .filter((t) => taskVisibleTo(t, me))
     .map((t) => {
       const inst = getInstance(t.instanceId);
       let processName = inst.defId;

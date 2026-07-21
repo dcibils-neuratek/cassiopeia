@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, setToken } from "./api.js";
 
-export type CurrentUser = { id: string; username: string; displayName: string; role: string };
+export type CurrentUser = { id: string; username: string; displayName: string; role: string; area?: string | null };
 
 export function Login({ onLogin }: { onLogin: (user: CurrentUser) => void }) {
   const [username, setUsername] = useState("");

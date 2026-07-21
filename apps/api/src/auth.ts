@@ -44,11 +44,11 @@ function verifyPassword(password: string, salt: string, expectedHash: string): b
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function registerUser(username: string, password: string, displayName: string, role: Role): PublicUser {
+export function registerUser(username: string, password: string, displayName: string, role: Role, area?: string | null): PublicUser {
   if (getUserByUsername(username)) throw new Error("Username already exists");
   if (!username || !password) throw new Error("Username and password are required");
   const { hash, salt } = hashPassword(password);
-  const user = createUser({ username, displayName: displayName || username, role, passwordHash: hash, passwordSalt: salt });
+  const user = createUser({ username, displayName: displayName || username, role, area: area?.trim() || null, passwordHash: hash, passwordSalt: salt });
   return toPublicUser(user);
 }
 

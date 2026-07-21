@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { McpToolPicker } from "./McpToolPicker.js";
 import { THEMES, getTheme, setTheme } from "./theme.js";
+import { AREA_SUGGESTIONS } from "./areas.js";
 
 type Connector = { id: string; type: string; config: Record<string, any> };
 
@@ -21,9 +22,9 @@ export function Settings() {
   const [msg, setMsg] = useState("");
   const [testInput, setTestInput] = useState('{ "income": 1200 }');
   const [testOut, setTestOut] = useState("");
-  const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string }[]>([]);
+  const [users, setUsers] = useState<{ id: string; username: string; displayName: string; role: string; area?: string | null }[]>([]);
   const [audit, setAudit] = useState<{ ts: string; actor: string; action: string; target: string | null }[]>([]);
-  const [nu, setNu] = useState({ username: "", password: "", displayName: "", role: "operator" });
+  const [nu, setNu] = useState({ username: "", password: "", displayName: "", role: "operator", area: "" });
   const [theme, setThemeState] = useState(getTheme());
   function pickTheme(id: string) { setTheme(id); setThemeState(id); }
   const [tab, setTab] = useState<TabId>("appearance");
@@ -42,7 +43,7 @@ export function Settings() {
 
   async function addUser() {
     const r = await api("/auth/users", { method: "POST", body: JSON.stringify(nu) });
-    if (r.ok) { setNu({ username: "", password: "", displayName: "", role: "operator" }); setMsg(`Usuario ${r.data.user.username} creado`); loadAdmin(); }
+    if (r.ok) { setNu({ username: "", password: "", displayName: "", role: "operator", area: "" }); setMsg(`Usuario ${r.data.user.username} creado`); loadAdmin(); }
     else setMsg(r.data?.error ?? "No se pudo crear el usuario");
   }
 
@@ -108,16 +109,17 @@ export function Settings() {
       {tab === "users" && (
       <section style={S.card}>
         <h2 style={S.h2}>Usuarios y acceso</h2>
-        <p style={S.hint}>Los roles son jerárquicos: <b>viewer</b> → <b>operator</b> (ejecutar/bandeja) → <b>analyst</b> (diseñar) → <b>admin</b> (ajustes/usuarios).</p>
+        <p style={S.hint}>Los roles son jerárquicos: <b>viewer</b> → <b>operator</b> (ejecutar/bandeja) → <b>analyst</b> (diseñar) → <b>admin</b> (ajustes/usuarios). El <b>área</b> filtra qué tareas ve un operador en su Bandeja e Inicio.</p>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
           <thead><tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
-            <th style={S.th}>Usuario</th><th style={S.th}>Nombre de usuario</th><th style={S.th}>Rol</th>
+            <th style={S.th}>Usuario</th><th style={S.th}>Nombre de usuario</th><th style={S.th}>Rol</th><th style={S.th}>Área</th>
           </tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
                 <td style={S.td}>{u.displayName}</td><td style={S.td}><code>{u.username}</code></td>
                 <td style={S.td}><span style={S.rolePill}>{u.role}</span></td>
+                <td style={S.td}>{u.area ? <span style={S.areaPill}>{u.area}</span> : <span style={{ color: "var(--text-faint)" }}>—</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -131,6 +133,12 @@ export function Settings() {
               {["viewer", "operator", "analyst", "admin"].map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+          <div style={{ flex: "1 1 120px" }}><L>Área <span style={S.hint}>operadores</span></L>
+            <input style={S.input} list="area-list" placeholder="ej. creditos" value={nu.area}
+              disabled={nu.role === "admin" || nu.role === "analyst"}
+              onChange={(e) => setNu({ ...nu, area: e.target.value })} />
+          </div>
+          <datalist id="area-list">{AREA_SUGGESTIONS.map((a) => <option key={a} value={a} />)}</datalist>
           <button style={S.primary} onClick={addUser}>Agregar usuario</button>
         </div>
       </section>
@@ -304,4 +312,5 @@ const S: Record<string, React.CSSProperties> = {
   th: { padding: "7px 10px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 },
   td: { padding: "7px 10px", color: "var(--text)", verticalAlign: "top" },
   rolePill: { fontSize: 11, background: "var(--primary-tint)", color: "var(--primary-strong)", borderRadius: 6, padding: "2px 8px", fontWeight: 700 },
+  areaPill: { fontSize: 11, background: "var(--surface-3)", color: "var(--text)", borderRadius: 6, padding: "2px 8px", fontWeight: 700 },
 };

@@ -22,6 +22,7 @@ import { api } from "./api.js";
 import { FormDesigner } from "./FormDesigner.js";
 import { Portal } from "./Portal.js";
 import { McpToolPicker } from "./McpToolPicker.js";
+import { AREA_SUGGESTIONS } from "./areas.js";
 
 const uid = () => Math.random().toString(36).slice(2, 6);
 
@@ -491,10 +492,11 @@ export function Designer({ defId }: { defId: string }) {
                         onChange={(e) => updateNode(selNode.id, { assignee: e.target.value || undefined } as any)} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <L>Rol</L>
-                      <input style={S.input} placeholder="ej. analista"
+                      <L>Área / equipo</L>
+                      <input style={S.input} list="designer-area-list" placeholder="ej. creditos"
                         value={(selNode as any).candidateRole ?? ""}
                         onChange={(e) => updateNode(selNode.id, { candidateRole: e.target.value || undefined } as any)} />
+                      <datalist id="designer-area-list">{AREA_SUGGESTIONS.map((a) => <option key={a} value={a} />)}</datalist>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>

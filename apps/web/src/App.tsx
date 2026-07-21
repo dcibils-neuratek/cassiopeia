@@ -162,12 +162,12 @@ export function App() {
         </div>
 
         <div key={mode} className="fade-in" style={{ marginTop: 20 }}>
-          {mode === "home" && <Home onOpen={openWorkflow} onTemplates={() => setMode("templates")} onDelete={canSee(user.role, "settings") ? deleteWorkflow : undefined} />}
+          {mode === "home" && <Home user={user} onOpen={openWorkflow} onTemplates={() => setMode("templates")} onInbox={() => setMode("inbox")} onDelete={canSee(user.role, "settings") ? deleteWorkflow : undefined} />}
           {mode === "stats" && <Stats />}
           {mode === "templates" && <Templates onUse={useTemplate} />}
           {mode === "build" && <Designer key={defId} defId={defId} />}
           {mode === "run" && <Portal key={defId} defId={defId} />}
-          {mode === "inbox" && <Inbox me={user.username} />}
+          {mode === "inbox" && <Inbox me={user.username} area={user.area ?? null} />}
           {mode === "monitor" && <Monitor />}
           {mode === "settings" && <Settings />}
         </div>

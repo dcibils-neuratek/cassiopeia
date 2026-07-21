@@ -42,7 +42,7 @@ function fmtValue(k: string, v: unknown): string {
   return JSON.stringify(v);
 }
 
-export function Inbox({ me }: { me: string }) {
+export function Inbox({ me, area }: { me: string; area?: string | null }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [defs, setDefs] = useState<{ id: string; name: string }[]>([]);
   const [filter, setFilter] = useState("all");
@@ -111,7 +111,10 @@ export function Inbox({ me }: { me: string }) {
       {/* ---- task list ---- */}
       <div style={{ width: 380, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
         <div style={S.bar}>
-          <span style={S.head}>Tareas ({shown.length})</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={S.head}>Tareas ({shown.length})</span>
+            {area && <span style={S.areaPill} title="Ves las tareas de tu área y las asignadas a vos">área: {area}</span>}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 4, alignItems: "center" }}>
               <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} /> mías
@@ -283,6 +286,7 @@ const S: Record<string, React.CSSProperties> = {
   select: { border: "1px solid var(--border)", borderRadius: 8, padding: "4px 8px", fontSize: 12, background: "var(--surface)", fontWeight: 600, color: "var(--text)" },
   tag: { fontSize: 11, background: "var(--surface-3)", borderRadius: 6, padding: "3px 8px", color: "var(--text-muted)" },
   prioPill: { fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: "3px 10px", textTransform: "uppercase", letterSpacing: 0.3 },
+  areaPill: { fontSize: 10.5, fontWeight: 800, borderRadius: 6, padding: "2px 8px", background: "var(--primary-tint)", color: "var(--primary-strong)" },
   claim: { background: "var(--primary)", color: "var(--on-primary)", border: 0, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   reassignInput: { border: "1px solid var(--border-strong)", borderRadius: 8, padding: "6px 9px", fontSize: 12, width: 120 },
   reassignBtn: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" },

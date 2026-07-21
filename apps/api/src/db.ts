@@ -188,6 +188,7 @@ function migrate(): void {
   addColumnIfMissing("tasks", "role", "role TEXT");
   addColumnIfMissing("tasks", "priority", "priority TEXT");
   addColumnIfMissing("tasks", "escalated", "escalated INTEGER DEFAULT 0");
+  addColumnIfMissing("users", "area", "area TEXT");
 }
 
 // ---- definitions ----
@@ -616,24 +617,38 @@ export interface UserRow {
   username: string;
   displayName: string;
   role: Role;
+  /** Business area / queue (e.g. creditos, riesgo, cumplimiento). Operators only see their area's tasks. */
+  area?: string | null;
   passwordHash: string;
   passwordSalt: string;
   createdAt: string;
 }
 
-export type PublicUser = Pick<UserRow, "id" | "username" | "displayName" | "role">;
+export type PublicUser = Pick<UserRow, "id" | "username" | "displayName" | "role" | "area">;
 
 export function toPublicUser(u: UserRow): PublicUser {
-  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role };
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, area: u.area ?? null };
 }
 
 export function createUser(u: Omit<UserRow, "id" | "createdAt"> & { id?: string }): UserRow {
   const row: UserRow = { id: u.id ?? randomUUID(), createdAt: new Date().toISOString(), ...u };
   db.prepare(
-    `INSERT INTO users (id, username, display_name, role, password_hash, password_salt, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(row.id, row.username, row.displayName, row.role, row.passwordHash, row.passwordSalt, row.createdAt);
+    `INSERT INTO users (id, username, display_name, role, area, password_hash, password_salt, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(row.id, row.username, row.displayName, row.role, row.area ?? null, row.passwordHash, row.passwordSalt, row.createdAt);
   return row;
+}
+
+/** Set (or clear) a user's business area. */
+export function updateUserArea(username: string, area: string | null): void {
+  db.prepare(`UPDATE users SET area = ? WHERE username = ?`).run(area, username);
+}
+
+/** Rename a task queue/area across open tasks and stored definitions (idempotent). */
+export function renameQueue(from: string, to: string): void {
+  db.prepare(`UPDATE tasks SET role = ? WHERE role = ?`).run(to, from);
+  db.prepare(`UPDATE process_definitions SET json = REPLACE(json, ?, ?)`)
+    .run(`"candidateRole":"${from}"`, `"candidateRole":"${to}"`);
 }
 
 function rowToUser(r: Record<string, unknown>): UserRow {
@@ -642,6 +657,7 @@ function rowToUser(r: Record<string, unknown>): UserRow {
     username: r.username as string,
     displayName: r.display_name as string,
     role: r.role as Role,
+    area: (r.area as string) ?? null,
     passwordHash: r.password_hash as string,
     passwordSalt: r.password_salt as string,
     createdAt: r.created_at as string,
