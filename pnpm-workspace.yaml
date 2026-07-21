@@ -1,3 +1,7 @@
 packages:
   - "packages/*"
   - "apps/*"
+# pnpm ≥11 no ejecuta scripts de build de dependencias salvo que se aprueben acá.
+# esbuild (bundler de Vite) necesita compilar su binario nativo en el install.
+allowBuilds:
+  esbuild: true
