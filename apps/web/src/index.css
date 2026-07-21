@@ -153,6 +153,9 @@ tbody tr { transition: background 0.12s ease; }
 .fade-in { animation: fadeIn 0.28s ease both; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
+.spin { animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* sidebar nav hover (used by App) */
 .nav-item { transition: background 0.14s ease, color 0.14s ease; }
 .nav-item:hover { background: var(--surface-3); color: var(--text); }

@@ -56,11 +56,12 @@ function outline(defId: string): string {
 }
 
 const SYSTEM =
-  "You are a banking business analyst. Read the workflow definition and describe, " +
-  "in clear functional language for a non-technical stakeholder, what this process does " +
-  "end to end: what starts it, what information is collected, what automated checks or " +
-  "decisions happen, how it branches, and how it concludes. Write 2–4 short paragraphs. " +
-  "Do not use bullet lists, code, or internal ids — just prose.";
+  "Sos un analista de negocio bancario. Leé la definición del flujo y describí, " +
+  "en lenguaje funcional claro para una persona no técnica, qué hace este proceso " +
+  "de punta a punta: qué lo inicia, qué información se recolecta, qué chequeos o " +
+  "decisiones automáticas ocurren, cómo se bifurca y cómo concluye. Escribí 2 a 4 " +
+  "párrafos cortos. No uses viñetas, código ni ids internos — solo prosa. " +
+  "Respondé siempre en español.";
 
 /**
  * Call the platform `describer` LLM (Claude Haiku by default; any OpenAI-compatible

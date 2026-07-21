@@ -109,6 +109,7 @@ export function Designer({ defId }: { defId: string }) {
   const [description, setDescription] = useState("");
   const [descBusy, setDescBusy] = useState(false);
   const [descErr, setDescErr] = useState("");
+  const [descAdvanced, setDescAdvanced] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInput, setAiInput] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -307,12 +308,16 @@ export function Designer({ defId }: { defId: string }) {
   }
 
   // ---- LLM process description ----
+  // Opening Describe generates immediately using the platform key stored in
+  // Settings (the `describer` connector) — no config step needed. Advanced
+  // model/URL/key overrides live behind a collapsible.
   async function openDescribe() {
-    setDescription(""); setDescErr("");
+    setDescription(""); setDescErr(""); setDescAdvanced(false);
+    setDescOpen(true);
     const r = await api(`/connectors`);
     const d = (r.data as Connector[]).find((c) => c.id === "describer");
-    if (d) setDescCfg({ baseUrl: d.config.baseUrl ?? "", model: d.config.model ?? "claude-haiku-4-5-20251001", apiKey: d.config.apiKey ?? "" });
-    setDescOpen(true);
+    if (d) setDescCfg({ baseUrl: d.config.baseUrl ?? "", model: d.config.model ?? "claude-haiku-4-5-20251001", apiKey: "" });
+    generateDescription();
   }
   async function saveDescriber() {
     await api(`/connectors`, { method: "POST", body: JSON.stringify({ id: "describer", type: "ai-agent", config: { ...descCfg, jsonOutput: false } }) });
@@ -322,7 +327,13 @@ export function Designer({ defId }: { defId: string }) {
     setDescBusy(true); setDescErr(""); setDescription("");
     // publish current design first so the description reflects what's on screen
     await api(`/definitions/${DEF_ID}/draft`, { method: "POST", body: JSON.stringify(toDefinition()) });
-    const r = await api(`/definitions/${DEF_ID}/describe`, { method: "POST", body: JSON.stringify(descCfg) });
+    // Send only real overrides — never the (empty) masked key, so the server
+    // uses the encrypted platform key from Settings.
+    const override: Record<string, string> = {};
+    if (descCfg.model) override.model = descCfg.model;
+    if (descCfg.baseUrl) override.baseUrl = descCfg.baseUrl;
+    if (descCfg.apiKey.trim()) override.apiKey = descCfg.apiKey.trim();
+    const r = await api(`/definitions/${DEF_ID}/describe`, { method: "POST", body: JSON.stringify(override) });
     setDescBusy(false);
     if (r.ok) setDescription(r.data.description);
     else setDescErr(r.data.error ?? "No se pudo generar la descripción");
@@ -759,33 +770,55 @@ export function Designer({ defId }: { defId: string }) {
               <button style={S.ghost} onClick={() => setDescOpen(false)}>Cerrar</button>
             </div>
             <div style={{ padding: 20, overflowY: "auto" }}>
-              <div style={S.descSettings}>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-                  <div style={{ flex: "1 1 160px" }}>
-                    <L>Modelo</L>
-                    <input style={S.input} value={descCfg.model} onChange={(e) => setDescCfg({ ...descCfg, model: e.target.value })} />
-                  </div>
-                  <div style={{ flex: "2 1 240px" }}>
-                    <L>URL base <span style={S.hint}>compatible con OpenAI</span></L>
-                    <input style={S.input} value={descCfg.baseUrl} onChange={(e) => setDescCfg({ ...descCfg, baseUrl: e.target.value })} />
-                  </div>
-                  <div style={{ flex: "1 1 160px" }}>
-                    <L>Clave de API</L>
-                    <input style={S.input} type="password" value={descCfg.apiKey} onChange={(e) => setDescCfg({ ...descCfg, apiKey: e.target.value })} />
-                  </div>
-                  <button style={S.ghost} onClick={saveDescriber}>Guardar</button>
+              <p style={{ ...S.hint, margin: "0 0 8px" }}>
+                Generada por <b>{descCfg.model || "Claude"}</b> con la clave configurada en Ajustes.
+              </p>
+
+              {descBusy && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "24px 4px", color: "var(--text-muted)", fontSize: 14 }}>
+                  <span className="spin" style={{ width: 16, height: 16, border: "2px solid var(--border-strong)", borderTopColor: "var(--primary)", borderRadius: "50%", display: "inline-block" }} />
+                  Leyendo el flujo y redactando la descripción…
                 </div>
-                <p style={{ ...S.hint, marginTop: 8 }}>Por defecto usa Claude Haiku — cambiá el modelo/URL/clave para cualquier proveedor compatible con OpenAI.</p>
-              </div>
+              )}
 
-              <button style={{ ...S.primary, marginTop: 14 }} disabled={descBusy} onClick={generateDescription}>
-                {descBusy ? "Leyendo el flujo…" : "Generar descripción"}
-              </button>
+              {descErr && (
+                <div style={{ ...S.errBar, marginTop: 4 }}>
+                  {descErr}
+                  <div style={{ ...S.hint, marginTop: 6 }}>Configurá el modelo y la clave en <b>Ajustes → Modelo de IA de la plataforma</b>, o usá los ajustes avanzados de abajo.</div>
+                </div>
+              )}
 
-              {descErr && <div style={{ ...S.errBar, marginTop: 12 }}>{descErr}</div>}
-              {description && (
+              {description && !descBusy && (
                 <div style={S.descBox}>
                   {description.split(/\n\n+/).map((p, i) => <p key={i} style={{ margin: "0 0 10px", lineHeight: 1.6 }}>{p}</p>)}
+                </div>
+              )}
+
+              {!descBusy && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14, flexWrap: "wrap" }}>
+                  <button style={S.primary} onClick={generateDescription}>{description ? "Regenerar" : "Generar descripción"}</button>
+                  <button style={S.ghost} onClick={() => setDescAdvanced((v) => !v)}>{descAdvanced ? "▾ Ocultar ajustes" : "⚙ Ajustes avanzados"}</button>
+                </div>
+              )}
+
+              {descAdvanced && (
+                <div style={{ ...S.descSettings, marginTop: 12 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <div style={{ flex: "1 1 160px" }}>
+                      <L>Modelo</L>
+                      <input style={S.input} value={descCfg.model} onChange={(e) => setDescCfg({ ...descCfg, model: e.target.value })} />
+                    </div>
+                    <div style={{ flex: "2 1 240px" }}>
+                      <L>URL base <span style={S.hint}>compatible con OpenAI</span></L>
+                      <input style={S.input} value={descCfg.baseUrl} onChange={(e) => setDescCfg({ ...descCfg, baseUrl: e.target.value })} />
+                    </div>
+                    <div style={{ flex: "1 1 160px" }}>
+                      <L>Clave de API <span style={S.hint}>opcional</span></L>
+                      <input style={S.input} type="password" placeholder="usa la de Ajustes" value={descCfg.apiKey} onChange={(e) => setDescCfg({ ...descCfg, apiKey: e.target.value })} />
+                    </div>
+                    <button style={S.ghost} onClick={saveDescriber}>Guardar como predeterminado</button>
+                  </div>
+                  <p style={{ ...S.hint, marginTop: 8 }}>Solo para esta descripción; dejá la clave en blanco para usar la del sistema. Sirve cualquier proveedor compatible con OpenAI.</p>
                 </div>
               )}
             </div>
