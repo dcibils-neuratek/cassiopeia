@@ -323,6 +323,17 @@ function recoveryHtml(name: string, title: string, resumeUrl: string): string {
   ].join("");
 }
 
+/** Delete one abandoned draft. Returns a human label (email/name) for the audit
+ *  trail. Throws if it doesn't exist. */
+export function removeDraft(appId: string, nodeId: string): string {
+  const d = getDraft(appId, nodeId);
+  if (!d) throw new Error("No encontramos ese borrador");
+  const data = d.data as Record<string, unknown>;
+  const label = String(data.email ?? data.fullName ?? d.appId);
+  deleteDraft(appId, nodeId);
+  return label;
+}
+
 /** Send an on-demand "come back" email for one abandoned draft. */
 export async function remindDraft(appId: string, nodeId: string, portalBase: string): Promise<{ to: string; resumeUrl: string }> {
   const draft = getDraft(appId, nodeId);

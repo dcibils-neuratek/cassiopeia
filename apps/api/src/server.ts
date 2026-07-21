@@ -70,7 +70,7 @@ import { bancoPage } from "./banco.js";
 import {
   startApplication, statusOf, submitStep, defIdForToken, intakeForm,
   journeyIntake, resolveJourney, saveJourneyDraft, submitJourneyStep,
-  listOpenDrafts, remindDraft,
+  listOpenDrafts, remindDraft, removeDraft,
 } from "./public-apply.js";
 import { getJourney } from "./journeys.js";
 import { sweepDrafts } from "./automation.js";
@@ -302,6 +302,15 @@ app.post("/drafts/remind", async (req, reply) => {
   if (!appId || !nodeId) return reply.code(400).send({ ok: false, error: "Falta appId o nodeId" });
   try { const r = await remindDraft(appId, nodeId, portalBaseOf(req)); return { ok: true, ...r }; }
   catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
+});
+// Manually discard an orphaned/abandoned draft (audited).
+app.delete("/drafts/:appId/:nodeId", async (req, reply) => {
+  const { appId, nodeId } = req.params as { appId: string; nodeId: string };
+  try {
+    const label = removeDraft(appId, nodeId);
+    addAudit(actor(req).username, "draft.delete", label);
+    return { ok: true };
+  } catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
 });
 // Local stand-in for an email provider, so the recovery flow is testable without
 // credentials. Logs the message and returns ok.

@@ -52,6 +52,14 @@ export function Drafts() {
       : { id: d.appId, ok: false, msg: r.data?.error || "No se pudo enviar" });
   }
   function copy(url?: string) { if (url && navigator.clipboard) navigator.clipboard.writeText(url); }
+  async function remove(d: Draft) {
+    if (!window.confirm(`¿Eliminar la solicitud sin completar de ${d.name || d.email || "este cliente"}? No se puede deshacer.`)) return;
+    setBusy(d.appId); setToast(null);
+    const r = await api(`/drafts/${d.appId}/${d.nodeId}`, { method: "DELETE" });
+    setBusy(null);
+    if (r.ok) setDrafts((xs) => xs.filter((x) => x.appId !== d.appId));
+    else setToast({ id: d.appId, ok: false, msg: r.data?.error || "No se pudo eliminar" });
+  }
 
   return (
     <div style={{ maxWidth: 960 }}>
@@ -85,6 +93,7 @@ export function Drafts() {
                   onClick={() => remind(d)}>
                   {busy === d.appId ? "Enviando…" : "Enviar recordatorio"}
                 </button>
+                <button style={S.danger} disabled={busy === d.appId} onClick={() => remove(d)} title="Eliminar (queda auditado)">Eliminar</button>
               </div>
               {toast && toast.id === d.appId && (
                 <div style={{ flexBasis: "100%", marginTop: 8, ...(toast.ok ? S.ok : S.err) }}>{toast.msg}</div>
@@ -107,6 +116,7 @@ const S: Record<string, React.CSSProperties> = {
   sub2: { color: "var(--text-muted)", fontSize: 12.5 },
   primary: { border: 0, background: "var(--primary)", color: "#fff", borderRadius: 9, padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   ghost: { border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-muted)", borderRadius: 9, padding: "8px 12px", fontSize: 13, cursor: "pointer" },
+  danger: { border: "1px solid #f6caca", background: "var(--surface)", color: "#b91c1c", borderRadius: 9, padding: "8px 12px", fontSize: 13, cursor: "pointer" },
   muted: { color: "var(--text-muted)" },
   empty: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 40, textAlign: "center", color: "var(--text-muted)" },
   warn: { background: "#fff4e5", color: "#9a3412", border: "1px solid #fde3c2", borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 16 },
