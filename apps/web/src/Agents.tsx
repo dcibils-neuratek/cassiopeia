@@ -113,7 +113,7 @@ export function Agents() {
           <button style={S.miniBtn} onClick={() => newIntegration("mcp")}>MCP</button>
           <button style={S.miniBtn} onClick={() => newIntegration("maverick-agent")}>Maverick</button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, flex: 1, overflowY: "auto", minHeight: 0 }}>
           {connectors.map((c) => {
             const active = selId === c.id;
             const pub = isPublished(c);
@@ -288,7 +288,7 @@ export function Agents() {
 function L({ children }: { children: React.ReactNode }) { return <label style={S.label}>{children}</label>; }
 
 const S: Record<string, React.CSSProperties> = {
-  sideCard: { width: 280, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", boxShadow: "var(--shadow-sm)", overflow: "hidden" },
+  sideCard: { width: 280, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", boxShadow: "var(--shadow-sm)", overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 168px)", position: "sticky", top: 20 },
   rail: { flexShrink: 0, width: 40, alignSelf: "stretch", minHeight: 220, border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 0", color: "var(--text-muted)" },
   railLabel: { writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 },
   sideHead: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottom: "1px solid var(--border)" },

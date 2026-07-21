@@ -52,7 +52,7 @@ export function FlowsWorkspace({ defId, onSelect }: { defId: string; onSelect: (
               <button style={S.iconBtn} title="Colapsar" onClick={() => setCollapsed(true)}>«</button>
             </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, maxHeight: "calc(100vh - 170px)", overflowY: "auto" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, flex: 1, overflowY: "auto", minHeight: 0 }}>
             {list.map((f) => {
               const active = defId === f.id;
               return (
@@ -81,7 +81,7 @@ export function FlowsWorkspace({ defId, onSelect }: { defId: string; onSelect: (
 }
 
 const S: Record<string, React.CSSProperties> = {
-  sideCard: { width: 250, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", boxShadow: "var(--shadow-sm)", overflow: "hidden" },
+  sideCard: { width: 250, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", boxShadow: "var(--shadow-sm)", overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 168px)", position: "sticky", top: 20 },
   rail: { flexShrink: 0, width: 40, alignSelf: "stretch", minHeight: 240, border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 0", color: "var(--text-muted)" },
   railLabel: { writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 },
   sideHead: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottom: "1px solid var(--border)" },

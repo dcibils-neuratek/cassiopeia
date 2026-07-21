@@ -60,7 +60,7 @@ export function Forms() {
             <button style={S.iconBtn} title="Colapsar" onClick={() => setCollapsed(true)}>«</button>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, flex: 1, overflowY: "auto", minHeight: 0 }}>
           {list.map((f) => {
             const active = sel === f.id;
             return (
@@ -94,7 +94,7 @@ export function Forms() {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  sideCard: { width: 280, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", boxShadow: "var(--shadow-sm)", overflow: "hidden" },
+  sideCard: { width: 280, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)", boxShadow: "var(--shadow-sm)", overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 168px)", position: "sticky", top: 20 },
   sideHead: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottom: "1px solid var(--border)" },
   eyebrow: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)", fontWeight: 700 },
   newBtn: { background: "var(--primary)", color: "var(--on-primary)", border: 0, borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
