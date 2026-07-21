@@ -6,13 +6,14 @@ export type Lang = "en" | "es";
 
 const DICT: Record<Lang, Record<string, string>> = {
   en: {
-    home: "Home", stats: "Stats", templates: "Templates", build: "Flows",
+    home: "Home", stats: "Stats", templates: "Templates", aibuild: "Build with AI", build: "Flows",
     forms: "Forms", agents: "Integrations",
     run: "Run", inbox: "Inbox", monitor: "Executions", drafts: "Incomplete", audit: "Audit", settings: "Settings",
     overview: "Overview", workflow: "Workflow", design: "Design", operate: "Operate", governance: "Governance",
     home_hint: "Your workflows at a glance",
     stats_hint: "Monitor runs across all workflows",
     templates_hint: "Start from a ready-made banking workflow",
+    aibuild_hint: "Describe a process and let AI draft the flow, forms and integrations — review before creating",
     build_hint: "Design a process: human tasks, agents and forms",
     forms_hint: "Design and reuse forms across your flows",
     agents_hint: "A catalog of connections -- APIs, AI agents and MCP tools -- to invoke from your flows",
@@ -24,13 +25,14 @@ const DICT: Record<Lang, Record<string, string>> = {
     settings_hint: "API keys and connectors",
   },
   es: {
-    home: "Inicio", stats: "Estadísticas", templates: "Plantillas", build: "Flujos",
+    home: "Inicio", stats: "Estadísticas", templates: "Plantillas", aibuild: "Construir con IA", build: "Flujos",
     forms: "Formularios", agents: "Integraciones",
     run: "Ejecutar", inbox: "Bandeja", monitor: "Ejecuciones", drafts: "Sin completar", audit: "Auditoría", settings: "Ajustes",
     overview: "Resumen", workflow: "Flujo", design: "Diseño", operate: "Operación", governance: "Gobierno",
     home_hint: "Tus flujos de un vistazo",
     stats_hint: "Monitorea las ejecuciones de todos los flujos",
     templates_hint: "Empieza desde un flujo bancario listo para usar",
+    aibuild_hint: "Describí un proceso y la IA arma el flujo, los formularios y las integraciones — revisás antes de crear",
     build_hint: "Diseñá un proceso: tareas humanas, agentes y formularios",
     forms_hint: "Diseñá y reutilizá formularios en tus flujos",
     agents_hint: "Un catálogo de conexiones -- APIs, agentes de IA y MCP -- para invocar desde tus flujos",

@@ -11,26 +11,27 @@ import { Inbox } from "./Inbox.js";
 import { Drafts } from "./Drafts.js";
 import { Audit } from "./Audit.js";
 import { FlowsWorkspace } from "./FlowsWorkspace.js";
+import { AiBuilder } from "./AiBuilder.js";
 import { Login, type CurrentUser } from "./Login.js";
 import { api, getToken, setToken } from "./api.js";
 import { t } from "./i18n.js";
 import { applyStoredTheme } from "./theme.js";
 
-type Mode = "home" | "stats" | "templates" | "build" | "forms" | "agents" | "run" | "inbox" | "monitor" | "drafts" | "audit" | "settings";
+type Mode = "home" | "stats" | "templates" | "aibuild" | "build" | "forms" | "agents" | "run" | "inbox" | "monitor" | "drafts" | "audit" | "settings";
 type DefSummary = { id: string; name: string };
 
 const ROLE_RANK: Record<string, number> = { viewer: 0, operator: 1, analyst: 2, admin: 3 };
 const MODE_MIN: Record<Mode, string> = {
   home: "viewer", stats: "viewer", monitor: "viewer",
   run: "operator", inbox: "operator", drafts: "operator",
-  templates: "analyst", build: "analyst", forms: "analyst", agents: "analyst",
+  templates: "analyst", aibuild: "analyst", build: "analyst", forms: "analyst", agents: "analyst",
   audit: "admin", settings: "admin",
 };
 const canSee = (role: string, mode: Mode) => (ROLE_RANK[role] ?? 0) >= ROLE_RANK[MODE_MIN[mode]];
 
 const GROUPS: { label: string; items: Mode[] }[] = [
   { label: "Overview", items: ["home", "stats"] },
-  { label: "Design", items: ["templates", "build", "forms", "agents"] },
+  { label: "Design", items: ["templates", "aibuild", "build", "forms", "agents"] },
   { label: "Operate", items: ["run", "inbox", "drafts", "monitor"] },
   { label: "Governance", items: ["audit"] },
 ];
@@ -156,6 +157,7 @@ export function App() {
           {mode === "home" && <Home user={user} onOpen={openWorkflow} onTemplates={() => setMode("templates")} onInbox={() => setMode("inbox")} onDelete={canSee(user.role, "settings") ? deleteWorkflow : undefined} />}
           {mode === "stats" && <Stats />}
           {mode === "templates" && <Templates onUse={useTemplate} />}
+          {mode === "aibuild" && <AiBuilder onCreated={(id) => { setDefId(id); setMode("build"); }} />}
           {mode === "build" && <FlowsWorkspace defId={defId} onSelect={setDefId} />}
           {mode === "forms" && <Forms />}
           {mode === "agents" && <Agents />}
@@ -221,6 +223,7 @@ function Icon({ name }: { name: Mode | "settings" }) {
     home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
     stats: <><path d="M3 3v18h18" /><rect x="7" y="12" width="3" height="6" /><rect x="12" y="8" width="3" height="10" /><rect x="17" y="4" width="3" height="14" /></>,
     templates: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+    aibuild: <><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9Z" /><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z" /></>,
     build: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
     forms: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8" /><path d="M8 12h8" /><path d="M8 16h5" /></>,
     agents: <><rect x="5" y="8" width="14" height="10" rx="2" /><path d="M12 8V4" /><circle cx="12" cy="3" r="1" /><path d="M9 13h.01" /><path d="M15 13h.01" /></>,

@@ -499,6 +499,49 @@ app.post("/definitions/:id/ai-build", async (req, reply) => {
   }
 });
 
+// AI system builder — PLAN step: generate a full workflow (definition + forms +
+// integrations) from a natural-language prompt or mermaid diagram, WITHOUT
+// persisting anything. The client shows the plan for review, then calls /commit.
+// Form ids are namespaced by the fresh flow id so nothing collides with existing
+// forms. Body: { instruction }.
+app.post("/ai-build/plan", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const b = (req.body ?? {}) as { instruction?: string };
+  if (!b.instruction) return reply.code(400).send({ ok: false, error: "instruction is required" });
+  try {
+    const connectorIds = listConnectors().map((c) => c.id);
+    const out = await generateWorkflow(b.instruction, undefined, connectorIds);
+    const flowId = `flow_${randomUUID().slice(0, 8)}`;
+    // Namespace generated form ids and rewire the userTask references, so
+    // committing a plan never overwrites a form from another flow.
+    const remap = new Map<string, string>();
+    for (const f of out.forms) { const nid = `${flowId}__${f.id}`; remap.set(f.id, nid); f.id = nid; }
+    for (const n of out.definition.nodes as any[]) if (n.formId && remap.has(n.formId)) n.formId = remap.get(n.formId);
+    out.definition.id = flowId;
+    return { ok: true, reply: out.reply, definition: out.definition, forms: out.forms, connectors: out.connectors, errors: out.errors };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+// AI system builder — COMMIT step: persist a plan the user reviewed and approved.
+// Saves forms + new integrations (as drafts) + the flow (as an editable draft).
+// Body: { definition, forms, connectors }.
+app.post("/ai-build/commit", async (req, reply) => {
+  if (!requireCap(req, reply, "build")) return;
+  const b = (req.body ?? {}) as { definition?: ProcessDefinition; forms?: FormDefinition[]; connectors?: { id: string; type: string; config: Record<string, any> }[] };
+  if (!b.definition?.id) return reply.code(400).send({ ok: false, error: "definition is required" });
+  try {
+    for (const f of b.forms ?? []) saveForm(f);
+    for (const c of b.connectors ?? []) saveConnector({ id: c.id, type: c.type, config: c.config ?? {} });
+    saveDefinition({ ...b.definition, version: 0, status: "draft" });
+    audit(req, "ai-build", b.definition.id);
+    return { ok: true, id: b.definition.id, errors: validateDefinition(b.definition) };
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
 // What the designer loads to edit (draft if present, else latest published).
 app.get("/definitions/:id/edit", async (req, reply) => {
   const { id } = req.params as { id: string };

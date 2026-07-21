@@ -87,8 +87,9 @@ Return ONLY a JSON object (no prose, no code fences) with this exact shape:
     { "id": "risk_api", "type": "ai-agent", "purpose": "assess credit risk and return {decision}" }
   ]
 }
+The instruction may be plain language OR a diagram (e.g. a mermaid flowchart). If it is a diagram, read its nodes and arrows and translate them into the workflow shape below.
 Rules:
-- If a serviceTask needs an integration that does not already exist, add it to the top-level "connectors" array with a short "id", a "type" (one of "ai-agent", "maverick-agent", "mcp", "http"), and a "purpose". Set that serviceTask's "connector" to the id. NEVER invent API keys, URLs, or agent ids — leave configuration to the user.
+- If a serviceTask needs an integration that does not already exist, add it to the top-level "connectors" array with a short "id", a "type" (one of "ai-agent", "maverick-agent", "mcp", "http"), a human "label" (a few words, e.g. "Verificación de identidad"), and a "purpose". Set that serviceTask's "connector" to the id. NEVER invent API keys, URLs, or agent ids — leave configuration to the user.
 - Prefer an EXISTING connector id (listed by the user) when one fits.
 - Exactly one "start" node and at least one "end" node.
 - Every non-end node has exactly one outgoing edge, EXCEPT gateways, which have 2+.
@@ -145,16 +146,22 @@ export async function generateWorkflow(
   // defaults (no secrets); the user fills keys/URLs afterward.
   const known = new Set(connectorIds);
   const newConnectors: { id: string; type: string; config: Record<string, any> }[] = [];
-  const defaultConfig = (type: string, purpose?: string): Record<string, any> =>
-    type === "maverick-agent" ? { baseUrl: "", apiKey: "", agentId: "" }
-    : type === "mcp" ? { url: "", toolName: "", apiKey: "" }
-    : type === "http" ? { url: "", method: "POST" }
-    : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: purpose || "You are a task agent inside a business process.", jsonOutput: true };
+  // Generated integrations start as DRAFTS (config.status) with a friendly label
+  // so they don't auto-appear in the flow designer until the user adds the key
+  // and publishes them — matching the integration lifecycle.
+  const defaultConfig = (type: string, purpose?: string, label?: string): Record<string, any> => {
+    const meta = { label: label || "Integración generada", status: "draft", ...(purpose ? { purpose } : {}) };
+    return type === "maverick-agent" ? { baseUrl: "", apiKey: "", agentId: "", ...meta }
+      : type === "mcp" ? { url: "", toolName: "", apiKey: "", ...meta }
+      : type === "http" ? { url: "", method: "POST", ...meta }
+      : { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", apiKey: "", instructions: purpose || "You are a task agent inside a business process.", jsonOutput: true, ...meta };
+  };
   for (const pc of Array.isArray((raw as any).connectors) ? (raw as any).connectors : []) {
     const id = typeof pc?.id === "string" ? pc.id : "";
     if (!id || known.has(id)) continue;
     const type = ["ai-agent", "maverick-agent", "mcp", "http"].includes(pc.type) ? pc.type : "ai-agent";
-    newConnectors.push({ id, type, config: defaultConfig(type, pc.purpose) });
+    const label = typeof pc.label === "string" && pc.label.trim() ? pc.label.trim() : id.replace(/[_-]+/g, " ");
+    newConnectors.push({ id, type, config: defaultConfig(type, pc.purpose, label) });
     known.add(id);
   }
 
