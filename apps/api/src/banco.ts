@@ -1,10 +1,12 @@
-// A standalone, customer-facing loan-application page ("Banco del Futuro"),
-// served by the API and driving the BPM flow through the public /apply endpoints.
+// The standalone, customer-facing "Banco del Futuro" portal: a single site with
+// several products (account, mortgage, credit, travel, loan). Each product card
+// starts its BPM flow via the public /apply endpoints and renders the flow's
+// forms dynamically from their schema, so no form is hard-coded here.
 // Self-contained (inline CSS/JS); the page JS avoids ${}/backticks so it can live
-// inside this template literal. %TOKEN% is replaced at serve time.
+// inside this template literal.
 
-export function bancoPage(token: string): string {
-  return PAGE.replace(/%TOKEN%/g, token);
+export function bancoPage(): string {
+  return PAGE;
 }
 
 const PAGE = `<!doctype html>
@@ -12,7 +14,7 @@ const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Banco del Futuro — Solicitud de préstamo</title>
+<title>Banco del Futuro</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet" />
 <style>
   :root{
@@ -21,31 +23,33 @@ const PAGE = `<!doctype html>
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:Inter,system-ui,sans-serif;font-optical-sizing:auto;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+  a{color:inherit}
   .top{background:linear-gradient(120deg,var(--brand),var(--brand-2));color:#fff}
   .top-inner{max-width:1080px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
-  .logo{display:flex;align-items:center;gap:12px;font-weight:800;font-size:18px;letter-spacing:.2px}
+  .logo{display:flex;align-items:center;gap:12px;font-weight:800;font-size:18px;letter-spacing:.2px;cursor:pointer}
   .logo .mark{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:18px}
   .top nav{display:flex;gap:22px;font-size:14px;opacity:.9}
-  .top nav span{cursor:default}
   .hero{background:linear-gradient(120deg,var(--brand),var(--brand-2));color:#fff;padding:44px 24px 90px}
   .hero-inner{max-width:1080px;margin:0 auto}
   .hero h1{font-size:34px;margin:0 0 10px;letter-spacing:-.02em;font-weight:800}
-  .hero p{margin:0;font-size:17px;opacity:.92;max-width:560px}
+  .hero p{margin:0;font-size:17px;opacity:.92;max-width:600px}
   .hero .pills{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
   .pill{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 12px;font-size:13px}
+  .products{max-width:1080px;margin:-60px auto 40px;padding:0 20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+  .prod{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 50px -28px rgba(11,61,145,.35);padding:20px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+  .prod:hover{transform:translateY(-3px);box-shadow:0 26px 56px -26px rgba(11,61,145,.45)}
+  .prod .ic{width:46px;height:46px;border-radius:12px;background:#eef4ff;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:12px}
+  .prod h3{margin:0 0 4px;font-size:17px}
+  .prod p{margin:0;color:var(--muted);font-size:13.5px}
+  .prod .go{margin-top:14px;color:var(--brand-2);font-weight:700;font-size:14px}
   .wrap{max-width:640px;margin:-64px auto 40px;padding:0 20px}
+  .back{display:inline-flex;align-items:center;gap:6px;color:#fff;opacity:.9;font-size:14px;cursor:pointer;margin-bottom:14px}
   .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 20px 50px -20px rgba(11,61,145,.35);padding:26px}
-  .steps{display:flex;gap:8px;margin-bottom:22px}
-  .steps .s{flex:1;height:6px;border-radius:999px;background:#e6ebf3;transition:background .3s}
-  .steps .s.active{background:var(--brand-2)}
-  .steps .s.done{background:var(--accent)}
   h2{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
   .sub{color:var(--muted);font-size:14px;margin:0 0 20px}
   label{display:block;font-size:13px;font-weight:600;color:#33445c;margin:14px 0 6px}
   input,select{width:100%;border:1px solid #cdd7e6;border-radius:11px;padding:12px 13px;font-size:15px;font-family:inherit;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
   input:focus,select:focus{outline:none;border-color:var(--brand-2);box-shadow:0 0 0 4px rgba(30,99,208,.15)}
-  .row{display:flex;gap:12px}
-  .row>div{flex:1}
   .btn{width:100%;margin-top:22px;background:linear-gradient(120deg,var(--brand),var(--brand-2));color:#fff;border:0;border-radius:12px;padding:14px 16px;font-size:16px;font-weight:700;cursor:pointer;transition:filter .15s,transform .08s}
   .btn:hover{filter:brightness(1.06)} .btn:active{transform:translateY(1px)} .btn:disabled{opacity:.6;cursor:not-allowed}
   .btn.ghost{background:#fff;color:var(--brand);border:1.5px solid #cdd7e6}
@@ -57,154 +61,168 @@ const PAGE = `<!doctype html>
   .badge{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;font-weight:700;font-size:14px}
   .badge.ok{background:#e7f7ee;color:var(--ok)} .badge.rev{background:#fff4e5;color:var(--warn)} .badge.bad{background:#fdeaea;color:var(--bad)}
   .offer{margin:18px 0;border:1px solid var(--line);border-radius:14px;overflow:hidden}
-  .offer .big{background:linear-gradient(120deg,#eef4ff,#e9fbf7);padding:20px;text-align:center}
-  .offer .big .amt{font-size:34px;font-weight:800;color:var(--brand)}
-  .offer .big .lbl{font-size:13px;color:var(--muted)}
   .offer .grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
   .offer .grid div{background:#fff;padding:14px 16px}
   .offer .grid .k{font-size:12px;color:var(--muted)} .offer .grid .v{font-size:17px;font-weight:700;margin-top:2px}
   .ai{background:#f2f7ff;border:1px solid #dbe7fb;border-radius:12px;padding:13px 14px;font-size:13.5px;color:#274060;margin-top:14px}
   .ai b{color:var(--brand)}
-  .terms{background:#f7f9fc;border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;color:var(--muted);max-height:150px;overflow:auto;margin:14px 0}
-  .check{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin-top:12px}
+  .check{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin-top:14px}
   .check input{width:18px;height:18px;margin-top:2px}
+  .ro{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .ro .k{color:var(--muted)} .ro .v{font-weight:700}
   .foot{max-width:1080px;margin:0 auto;padding:24px;color:#8a99ad;font-size:12px;text-align:center}
   .err{background:#fdeaea;color:#991b1b;border:1px solid #f6caca;border-radius:10px;padding:10px 12px;font-size:13px;margin-top:12px}
 </style>
 </head>
 <body>
   <header class="top"><div class="top-inner">
-    <div class="logo"><span class="mark">✦</span> Banco del Futuro</div>
+    <div class="logo" id="home"><span class="mark">✦</span> Banco del Futuro</div>
     <nav><span>Cuentas</span><span>Tarjetas</span><span>Préstamos</span><span>Ayuda</span></nav>
   </div></header>
-  <section class="hero"><div class="hero-inner">
-    <h1>Tu préstamo personal, aprobado con IA en minutos.</h1>
-    <p>Completá la solicitud y nuestro analista de crédito inteligente evalúa tu perfil al instante. Sin filas, sin papeleo.</p>
-    <div class="pills"><span class="pill">🔒 Conexión segura</span><span class="pill">⚡ Respuesta inmediata</span><span class="pill">🤖 Evaluación con IA</span></div>
-  </div></section>
-
-  <main class="wrap"><div class="card" id="card"></div>
-    <div class="secure">🔒 Tus datos viajan cifrados. Banco del Futuro no comparte tu información.</div>
-  </main>
+  <div id="app"></div>
   <footer class="foot">Banco del Futuro · Demo · Powered by Neuratek Cassiopeia</footer>
 
 <script>
 (function(){
-  var TOKEN="%TOKEN%";
-  var card=document.getElementById("card");
-  var state={appId:null,offer:null,poll:null};
+  var PRODUCTS=[
+    {key:"cuenta",token:"banco-cuenta",title:"Apertura de cuenta",tagline:"Abrí tu cuenta 100% online, con verificación por IA.",icon:"🏦"},
+    {key:"prestamo",token:"banco-del-futuro-loan",title:"Préstamo personal",tagline:"Pre-aprobado con IA en minutos. Sin filas.",icon:"💵"},
+    {key:"credito",token:"banco-credito",title:"Crédito personal",tagline:"Scoring instantáneo con inteligencia artificial.",icon:"💳"},
+    {key:"hipoteca",token:"banco-hipoteca",title:"Hipoteca",tagline:"Simulá y solicitá tu hipoteca en un paso.",icon:"🏠"},
+    {key:"viaje",token:"banco-viaje",title:"Aviso de viaje",tagline:"Usá tu tarjeta en el exterior sin sorpresas.",icon:"✈️"}
+  ];
+  var app=document.getElementById("app");
+  var state={prod:null,appId:null,poll:null};
   var money=function(n){ if(n==null||isNaN(n))return "—"; return new Intl.NumberFormat("es",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n); };
+  function esc(x){return String(x==null?"":x).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}
+  document.getElementById("home").addEventListener("click",screenHome);
 
-  function steps(active,done){
-    var s="";for(var i=1;i<=3;i++){var c="s";if(i<done||done==="all")c+=" done";else if(i===active)c+=" active";s+='<div class="'+c+'"></div>';}
-    return '<div class="steps">'+s+'</div>';
-  }
-  function esc(x){return String(x==null?"":x).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
-
-  function screenForm(){
-    card.innerHTML = steps(1,1) +
-      '<h2>Solicitá tu préstamo</h2><p class="sub">Contanos un poco sobre vos. Toma menos de un minuto.</p>'+
-      '<form id="f">'+
-      '<label>Nombre completo</label><input name="fullName" required placeholder="Ada Lovelace" />'+
-      '<label>Email</label><input name="email" type="email" required placeholder="vos@email.com" />'+
-      '<div class="row"><div><label>Ingreso anual (USD)</label><input name="annualIncome" type="number" min="0" required placeholder="120000" /></div>'+
-      '<div><label>Monto solicitado (USD)</label><input name="amount" type="number" min="1000" required placeholder="20000" /></div></div>'+
-      '<div class="row"><div><label>Plazo (años)</label><input name="termYears" type="number" min="1" max="30" value="5" required /></div>'+
-      '<div><label>Situación laboral</label><select name="employmentStatus" required><option value="employed">En relación de dependencia</option><option value="self">Independiente</option><option value="unemployed">Desempleado</option></select></div></div>'+
-      '<button class="btn" type="submit">Solicitar préstamo →</button>'+
-      '<div id="ferr"></div></form>';
-    document.getElementById("f").addEventListener("submit",submit);
+  // ---- landing ----
+  function screenHome(){
+    if(state.poll){clearInterval(state.poll);state.poll=null;}
+    state.prod=null;state.appId=null;
+    var cards="";
+    for(var i=0;i<PRODUCTS.length;i++){var p=PRODUCTS[i];
+      cards+='<div class="prod" data-k="'+p.key+'"><div class="ic">'+p.icon+'</div><h3>'+esc(p.title)+'</h3><p>'+esc(p.tagline)+'</p><div class="go">Empezar →</div></div>';}
+    app.innerHTML=
+      '<section class="hero"><div class="hero-inner"><h1>Tu banco, 100% digital.</h1>'+
+      '<p>Elegí un producto y resolvelo en minutos. Nuestros agentes de IA analizan tu caso al instante; un humano solo interviene cuando hace falta.</p>'+
+      '<div class="pills"><span class="pill">🔒 Conexión segura</span><span class="pill">⚡ Respuesta inmediata</span><span class="pill">🤖 Decisiones con IA</span></div></div></section>'+
+      '<div class="products">'+cards+'</div>';
+    var els=app.querySelectorAll(".prod");
+    for(var j=0;j<els.length;j++){ els[j].addEventListener("click",function(){ openProduct(this.getAttribute("data-k")); }); }
   }
 
-  function submit(e){
-    e.preventDefault();
-    var fd=new FormData(e.target), data={};
-    fd.forEach(function(v,k){ data[k]=(k==="annualIncome"||k==="amount"||k==="termYears")?Number(v):v; });
-    screenAnalyzing();
-    fetch("/apply/"+TOKEN,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(data)})
-      .then(function(r){return r.json();})
-      .then(function(res){ if(res.ok===false)throw new Error(res.error||"Error"); state.appId=res.appId; route(res); })
-      .catch(function(err){ screenError(err.message); });
+  function shell(inner){
+    app.innerHTML='<section class="hero" style="padding-bottom:90px"><div class="hero-inner"><div class="back" id="bk">← Volver a productos</div>'+
+      '<h1 style="font-size:26px">'+esc(state.prod.title)+'</h1></div></section>'+
+      '<main class="wrap"><div class="card" id="card">'+inner+'</div>'+
+      '<div class="secure">🔒 Tus datos viajan cifrados. Banco del Futuro no comparte tu información.</div></main>';
+    document.getElementById("bk").addEventListener("click",screenHome);
+  }
+  function setCard(html){ var c=document.getElementById("card"); if(c)c.innerHTML=html; }
+
+  function openProduct(key){
+    for(var i=0;i<PRODUCTS.length;i++) if(PRODUCTS[i].key===key) state.prod=PRODUCTS[i];
+    state.appId=null;
+    shell('<div class="center"><div class="spinner"></div></div>');
+    fetch("/apply/"+state.prod.token+"/intake").then(function(r){return r.json();}).then(function(res){
+      if(res.ok===false||!res.form)throw new Error(res.error||"Producto no disponible");
+      setCard(formHtml(res.form,{},"Completá tus datos","Empezar →"));
+      wireForm(res.form,function(data){ start(data); });
+    }).catch(function(e){ setCard(errHtml(e.message)); });
   }
 
-  function screenAnalyzing(){
-    card.innerHTML = steps(1,1) + '<div class="center"><div class="spinner"></div><h2>Analizando tu solicitud…</h2><p class="sub">Nuestro analista de crédito con IA está evaluando tu perfil.</p></div>';
+  // ---- generic schema-driven form renderer ----
+  function fieldHtml(f,summary){
+    var v=summary&&(summary[f.expr]!=null?summary[f.expr]:summary[f.bind]);
+    if(f.kind==="computed"){ return '<div class="ro"><span class="k">'+esc(f.label)+'</span><span class="v">'+esc(fmt(f,v))+'</span></div>'; }
+    if(f.kind==="checkbox"){ return '<label class="check"><input type="checkbox" name="'+f.bind+'"'+(f.required?" data-req=1":"")+' /> '+esc(f.label)+'</label>'; }
+    var lab='<label>'+esc(f.label)+(f.required?' *':'')+'</label>';
+    if(f.kind==="select"){ var o="";for(var i=0;i<(f.options||[]).length;i++){o+='<option value="'+esc(f.options[i].value)+'">'+esc(f.options[i].label)+'</option>';} return lab+'<select name="'+f.bind+'"'+(f.required?" required":"")+'>'+o+'</select>'; }
+    var type=f.kind==="number"?"number":f.kind==="email"?"email":f.kind==="date"?"date":"text";
+    var attr=(f.required?" required":"")+(f.min!=null?' min="'+f.min+'"':"")+(f.max!=null?' max="'+f.max+'"':"")+(f.pattern?' pattern="'+esc(f.pattern)+'"':"")+(f.defaultValue!=null?' value="'+esc(f.defaultValue)+'"':"");
+    return lab+'<input name="'+f.bind+'" type="'+type+'"'+attr+' />';
   }
-  function screenReview(){
-    card.innerHTML = steps(2,1) + '<div class="center"><div class="spinner"></div><span class="badge rev">⏳ En revisión</span><h2 style="margin-top:14px">Un especialista está revisando tu solicitud</h2><p class="sub">Tu caso requiere una revisión adicional. Te mostramos el resultado apenas esté listo — no cierres esta página.</p></div>';
-    if(!state.poll){ state.poll=setInterval(pollStatus,3000); }
+  function fmt(f,v){ if(v==null||v==="")return "—"; if(/payment|amount|income|value/i.test(f.expr||f.bind||""))return money(v); return String(v); }
+  function formHtml(form,summary,heading,btn){
+    var fields=form.fields||[], body="";
+    for(var i=0;i<fields.length;i++) body+=fieldHtml(fields[i],summary);
+    return '<h2>'+esc(heading||form.title)+'</h2><p class="sub">'+esc(state.prod.tagline)+'</p><form id="f">'+body+'<button class="btn" type="submit">'+esc(btn||"Continuar →")+'</button><div id="ferr"></div></form>';
   }
-  function pollStatus(){
-    fetch("/apply/"+TOKEN+"/"+state.appId).then(function(r){return r.json();}).then(function(res){
-      if(res.stage!=="review"){ clearInterval(state.poll); state.poll=null; route(res); }
-    }).catch(function(){});
-  }
-
-  function route(res){
-    if(res.stage==="offer"){ state.offer=res.offer; screenOffer(res.offer); }
-    else if(res.stage==="review"){ screenReview(); }
-    else if(res.stage==="approved"){ screenApproved(res.offer); }
-    else if(res.stage==="declined"){ screenDeclined(res.offer); }
-    else if(res.stage==="processing"){ setTimeout(function(){ fetch("/apply/"+TOKEN+"/"+state.appId).then(function(r){return r.json();}).then(route); },1500); }
-    else { screenError("No pudimos procesar tu solicitud."); }
-  }
-
-  function screenOffer(o){
-    var reason = o&&o.reasoning ? '<div class="ai">🤖 <b>Análisis de crédito (IA):</b> '+esc(o.reasoning)+(o.creditScore!=null?' · Score: <b>'+esc(o.creditScore)+'</b>':'')+'</div>' : '';
-    card.innerHTML = steps(2,1) +
-      '<span class="badge ok">✓ ¡Pre-aprobado!</span>'+
-      '<h2 style="margin-top:12px">Tu oferta está lista</h2><p class="sub">Revisá las condiciones de tu préstamo personal.</p>'+
-      '<div class="offer"><div class="big"><div class="amt">'+money(o&&o.amount)+'</div><div class="lbl">Monto del préstamo</div></div>'+
-      '<div class="grid"><div><div class="k">Cuota mensual estimada</div><div class="v">'+money(o&&o.monthlyPayment)+'</div></div>'+
-      '<div><div class="k">Plazo</div><div class="v">'+esc(o&&o.termYears)+' años</div></div></div></div>'+
-      reason +
-      '<button class="btn" id="acc">Aceptar condiciones →</button>'+
-      '<button class="btn ghost" id="decl" style="margin-top:10px">Ahora no</button>';
-    document.getElementById("acc").addEventListener("click",screenSign);
-    document.getElementById("decl").addEventListener("click",screenForm);
-  }
-
-  function screenSign(){
-    var o=state.offer||{};
-    card.innerHTML = steps(3,2) +
-      '<h2>Firmá tu préstamo</h2><p class="sub">Último paso: confirmá que aceptás las condiciones.</p>'+
-      '<div class="offer"><div class="grid" style="grid-template-columns:1fr 1fr">'+
-      '<div><div class="k">Monto</div><div class="v">'+money(o.amount)+'</div></div>'+
-      '<div><div class="k">Cuota mensual</div><div class="v">'+money(o.monthlyPayment)+'</div></div>'+
-      '<div><div class="k">Plazo</div><div class="v">'+esc(o.termYears)+' años</div></div>'+
-      '<div><div class="k">Tasa</div><div class="v">6,0% anual</div></div></div></div>'+
-      '<div class="terms">Al firmar, aceptás el contrato de préstamo personal de Banco del Futuro, incluyendo el cronograma de pagos, la tasa nominal anual del 6% y las condiciones generales. Esta es una demostración; no se genera ninguna obligación real.</div>'+
-      '<label class="check"><input type="checkbox" id="ok" /> He leído y acepto los términos y condiciones del préstamo.</label>'+
-      '<button class="btn" id="sign" disabled>Firmar y finalizar</button>'+
-      '<button class="btn ghost" id="back" style="margin-top:10px">Volver</button><div id="serr"></div>';
-    var ok=document.getElementById("ok"), btn=document.getElementById("sign");
-    ok.addEventListener("change",function(){ btn.disabled=!ok.checked; });
-    document.getElementById("back").addEventListener("click",function(){ screenOffer(state.offer); });
-    btn.addEventListener("click",function(){
-      btn.disabled=true; btn.textContent="Firmando…";
-      fetch("/apply/"+TOKEN+"/"+state.appId+"/accept",{method:"POST"}).then(function(r){return r.json();})
-        .then(function(res){ if(res.ok===false)throw new Error(res.error||"Error"); route(res); })
-        .catch(function(err){ document.getElementById("serr").innerHTML='<div class="err">'+esc(err.message)+'</div>'; btn.disabled=false; btn.textContent="Firmar y finalizar"; });
+  function wireForm(form,onData){
+    var el=document.getElementById("f"); if(!el)return;
+    el.addEventListener("submit",function(e){
+      e.preventDefault();
+      var data={},fields=form.fields||[];
+      for(var i=0;i<fields.length;i++){ var f=fields[i]; if(f.kind==="computed")continue;
+        var node=el.elements[f.bind]; if(!node)continue;
+        if(f.kind==="checkbox"){ if(node.getAttribute&&node.getAttribute("data-req")&&!node.checked){ ferr("Tenés que aceptar para continuar."); return; } data[f.bind]=!!node.checked; }
+        else { var val=node.value; if(f.kind==="number") val=val===""?null:Number(val); data[f.bind]=val; }
+      }
+      onData(data);
     });
   }
+  function ferr(m){ var e=document.getElementById("ferr"); if(e)e.innerHTML='<div class="err">'+esc(m)+'</div>'; }
 
-  function screenApproved(o){
-    card.innerHTML = steps(3,"all") +
-      '<div class="center"><div style="font-size:52px">🎉</div><span class="badge ok">✓ Préstamo aprobado</span>'+
-      '<h2 style="margin-top:14px">¡Felicitaciones!</h2><p class="sub">Tu préstamo de '+money(o&&o.amount)+' fue aprobado y firmado. El dinero se acreditará en tu cuenta en las próximas horas.</p>'+
-      '<button class="btn" onclick="location.reload()" style="max-width:260px;margin:8px auto 0">Nueva solicitud</button></div>';
+  // ---- flow driving ----
+  function start(data){
+    screenAnalyzing();
+    fetch("/apply/"+state.prod.token,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(data)})
+      .then(function(r){return r.json();}).then(function(res){ if(res.ok===false)throw new Error(res.error||"Error"); state.appId=res.appId; route(res); })
+      .catch(function(e){ setCard(errHtml(e.message)); });
   }
-  function screenDeclined(){
-    card.innerHTML = steps(2,1) +
-      '<div class="center"><span class="badge bad">Solicitud no aprobada</span>'+
-      '<h2 style="margin-top:14px">No pudimos aprobar tu préstamo</h2><p class="sub">Según nuestra evaluación, en este momento no podemos ofrecerte este préstamo. Podés volver a intentarlo más adelante.</p>'+
-      '<button class="btn ghost" onclick="location.reload()" style="max-width:260px;margin:8px auto 0">Volver al inicio</button></div>';
+  function step(data){
+    setCard('<div class="center"><div class="spinner"></div><h2>Procesando…</h2></div>');
+    fetch("/apply/"+state.prod.token+"/"+state.appId+"/step",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(data)})
+      .then(function(r){return r.json();}).then(function(res){ if(res.ok===false)throw new Error(res.error||"Error"); route(res); })
+      .catch(function(e){ setCard(errHtml(e.message)); });
   }
-  function screenError(msg){
-    card.innerHTML = steps(1,1) + '<div class="center"><h2>Ups…</h2><p class="sub">'+esc(msg)+'</p><button class="btn ghost" onclick="location.reload()" style="max-width:260px;margin:0 auto">Reintentar</button></div>';
-  }
+  function screenAnalyzing(){ setCard('<div class="center"><div class="spinner"></div><h2>Analizando tu solicitud…</h2><p class="sub">Nuestro agente de IA está evaluando tu caso.</p></div>'); }
 
-  screenForm();
+  function route(res){
+    if(res.stage==="form"){ screenStep(res); }
+    else if(res.stage==="review"){ screenReview(res); }
+    else if(res.stage==="processing"){ setTimeout(function(){ poll(); },1500); }
+    else if(res.stage==="done"){ screenDone(res); }
+    else { setCard(errHtml(res.message||"No pudimos procesar tu solicitud.")); }
+  }
+  function poll(){ fetch("/apply/"+state.prod.token+"/"+state.appId).then(function(r){return r.json();}).then(route).catch(function(){ setTimeout(poll,2000); }); }
+
+  function aiNote(s){ return s&&s.reasoning ? '<div class="ai">🤖 <b>Análisis del agente (IA):</b> '+esc(s.reasoning)+(s.creditScore!=null?' · Score: <b>'+esc(s.creditScore)+'</b>':'')+'</div>' : ''; }
+
+  function screenStep(res){
+    var form=res.form,s=res.summary||{};
+    setCard('<span class="badge ok">✓ Análisis listo</span><div style="height:12px"></div>'+aiNote(s)+formHtml(form,s,form.title,"Confirmar →"));
+    wireForm(form,function(data){ step(data); });
+  }
+  function screenReview(res){
+    setCard('<div class="center"><div class="spinner"></div><span class="badge rev">⏳ En revisión</span><h2 style="margin-top:14px">Un especialista está revisando tu caso</h2><p class="sub">Tu solicitud requiere una revisión adicional. Te mostramos el resultado apenas esté listo — no cierres esta página.</p></div>');
+    if(!state.poll){ state.poll=setInterval(function(){ fetch("/apply/"+state.prod.token+"/"+state.appId).then(function(r){return r.json();}).then(function(res){ if(res.stage!=="review"){ clearInterval(state.poll); state.poll=null; route(res); } }).catch(function(){}); },3000); }
+  }
+  function screenDone(res){
+    var s=res.summary||{}, ok=res.outcome!=="declined";
+    var rows="";
+    var add=function(k,v){ if(v!=null&&v!=="") rows+='<div class="ro"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>'; };
+    add("Titular",s.fullName?esc(s.fullName):null);
+    add("Cuenta",s.accountId?esc(s.accountId):null);
+    add("Monto",s.amount!=null?money(s.amount):null);
+    add("Cuota mensual",s.monthlyPayment!=null?money(s.monthlyPayment):null);
+    add("Score crediticio",s.creditScore!=null?esc(s.creditScore):null);
+    add("Referencia",s.reference?esc(s.reference):null);
+    add("Cobertura",s.coverage?esc(s.coverage):null);
+    add("Nivel de riesgo",s.riskLevel?esc(s.riskLevel):null);
+    var head = ok
+      ? '<div style="font-size:52px">🎉</div><span class="badge ok">✓ '+esc(res.title||"Listo")+'</span><h2 style="margin-top:14px">¡Todo listo!</h2>'
+      : '<span class="badge bad">'+esc(res.title||"No aprobado")+'</span><h2 style="margin-top:14px">No pudimos avanzar</h2>';
+    var msg = ok ? '<p class="sub">Tu solicitud fue procesada con éxito.</p>' : '<p class="sub">Según nuestra evaluación, en este momento no podemos avanzar. Podés intentarlo más adelante.</p>';
+    setCard('<div class="center">'+head+msg+'</div>'+(rows?'<div class="offer" style="margin-top:6px"><div style="padding:6px 16px">'+rows+'</div></div>':'')+aiNote(s)+
+      '<button class="btn ghost" id="again" style="max-width:280px;margin:18px auto 0">Volver a productos</button>');
+    var b=document.getElementById("again"); if(b)b.addEventListener("click",screenHome);
+  }
+  function errHtml(msg){ return '<div class="center"><h2>Ups…</h2><p class="sub">'+esc(msg)+'</p><button class="btn ghost" onclick="location.reload()" style="max-width:260px;margin:0 auto">Reintentar</button></div>'; }
+
+  screenHome();
 })();
 </script>
 </body>

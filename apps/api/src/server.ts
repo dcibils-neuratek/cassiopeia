@@ -10,6 +10,7 @@ import {
   getEditableDefinition,
   eventDailyCounts,
   getFile,
+  getConnector,
   getForm,
   getInstance,
   getTask,
@@ -56,7 +57,7 @@ import {
 } from "./db.js";
 import { randomUUID } from "node:crypto";
 import { seedSample } from "./sample.js";
-import { listTemplates, installTemplate } from "./templates.js";
+import { listTemplates, installTemplate, syncTemplate } from "./templates.js";
 import { describeProcess } from "./describe.js";
 import { generateWorkflow } from "./ai-build.js";
 import { runConnector, listMcpTools } from "./connectors.js";
@@ -66,7 +67,7 @@ import { computeAnalytics, analyzeProcess } from "./analytics.js";
 import { buildCase, listCaseSummaries } from "./case.js";
 import { login, logout, userForToken, registerUser, seedAuth, can, ALL_ROLES, type Capability } from "./auth.js";
 import { bancoPage } from "./banco.js";
-import { startApplication, statusOf, acceptOffer, defIdForToken } from "./public-apply.js";
+import { startApplication, statusOf, submitStep, defIdForToken, intakeForm } from "./public-apply.js";
 
 const app = Fastify({ logger: true, bodyLimit: 20 * 1024 * 1024 }); // allow base64 file uploads
 await app.register(cors, { origin: true });
@@ -75,23 +76,46 @@ initDb();
 seedSample();
 seedAuth(); // default admin/admin on first run
 
-// Seed the "Banco del Futuro" demo: the loan flow, a public form token, and a
-// bank loan officer who approves borderline cases in the Inbox.
+// Seed the "Banco del Futuro" demo: the five products (flows), one public token
+// each for the customer portal, the staff who work the Inbox by area, and the
+// AI agents' platform key.
 try {
-  let hasLoan = false;
-  try { getDefinition("loan-preapproval"); hasLoan = true; } catch { hasLoan = false; }
-  if (!hasLoan) installTemplate("loan-preapproval");
-  ensurePublicTrigger("banco-del-futuro-loan", "loan-preapproval", "Banco del Futuro — public loan form");
-  // Normalize the loan review queue to a friendly area name so it lines up with
-  // the bank officer's area (idempotent: no-op once already renamed).
-  renameQueue("underwriter", "creditos");
-  const officer = getUserByUsername("officer");
-  if (!officer) {
-    registerUser("officer", "officer", "Banco del Futuro — Mesa de Crédito", "operator", "creditos");
-    console.warn("[demo] Seeded bank officer (officer/officer, área creditos) for the Inbox.");
-  } else if (!officer.area) {
-    updateUserArea("officer", "creditos");
+  // [flow id, public token] — onboarding is seeded published by seedSample().
+  const PRODUCTS: [string, string][] = [
+    ["loan-preapproval", "banco-del-futuro-loan"],
+    ["onboarding", "banco-cuenta"],
+    ["mortgage-sim", "banco-hipoteca"],
+    ["personal-credit", "banco-credito"],
+    ["travel-notification", "banco-viaje"],
+  ];
+  for (const [defId, token] of PRODUCTS) {
+    syncTemplate(defId); // install or roll out the latest Spanish version (idempotent)
+    ensurePublicTrigger(token, defId, `Banco del Futuro — ${defId}`);
   }
+  renameQueue("underwriter", "creditos"); // legacy queue → friendly area name
+
+  // Staff who work the Inbox, one per business area.
+  const ensureStaff = (username: string, name: string, area: string) => {
+    const u = getUserByUsername(username);
+    if (!u) registerUser(username, username, name, "operator", area);
+    else if (!u.area) updateUserArea(username, area);
+  };
+  ensureStaff("officer", "Banco del Futuro — Mesa de Crédito", "creditos");
+  ensureStaff("cumplimiento", "Banco del Futuro — Cumplimiento", "cumplimiento");
+
+  // AI agents are installed key-less; give them the platform key (from Settings →
+  // Modelo de IA) if they don't have their own, so the demo works turnkey.
+  try {
+    const platformKey = getConnector("describer").config.apiKey as string | undefined;
+    if (platformKey) {
+      for (const id of ["credit-agent", "kyc-agent", "mortgage-agent", "fraud-agent"]) {
+        try {
+          const c = getConnector(id);
+          if (!c.config.apiKey) saveConnector({ ...c, config: { ...c.config, apiKey: platformKey } });
+        } catch { /* agent not installed */ }
+      }
+    }
+  } catch { /* no describer */ }
 } catch (err) { app.log.warn(`demo seed skipped: ${(err as Error).message}`); }
 
 startScheduler(); // resume timer nodes whose wake time has passed
@@ -211,10 +235,16 @@ app.post("/instances/:id/comments", async (req, reply) => {
 
 app.get("/health", async () => ({ ok: true }));
 
-// ---- Banco del Futuro: public customer-facing loan site ----
+// ---- Banco del Futuro: public customer-facing multi-product site ----
 app.get("/banco", async (_req, reply) => {
   reply.type("text/html");
-  return bancoPage("banco-del-futuro-loan");
+  return bancoPage();
+});
+// The intake form schema for a product (so the portal renders it dynamically).
+app.get("/apply/:token/intake", async (req, reply) => {
+  const { token } = req.params as { token: string };
+  try { return intakeForm(token); }
+  catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
 });
 app.post("/apply/:token", async (req, reply) => {
   const { token } = req.params as { token: string };
@@ -226,9 +256,10 @@ app.get("/apply/:token/:appId", async (req, reply) => {
   try { return statusOf(defIdForToken(token), appId); }
   catch (err) { return reply.code(404).send({ ok: false, error: (err as Error).message }); }
 });
-app.post("/apply/:token/:appId/accept", async (req, reply) => {
+// Complete the current customer step (offer acceptance, signature, …).
+app.post("/apply/:token/:appId/step", async (req, reply) => {
   const { token, appId } = req.params as { token: string; appId: string };
-  try { return await acceptOffer(token, appId); }
+  try { return await submitStep(token, appId, (req.body ?? {}) as Record<string, never>); }
   catch (err) { return reply.code(400).send({ ok: false, error: (err as Error).message }); }
 });
 

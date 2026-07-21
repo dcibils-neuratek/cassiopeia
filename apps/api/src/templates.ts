@@ -1,11 +1,13 @@
-// Workflow templates — ready-made banking processes the user can install and
-// learn from. Each bundles a process definition (with layout), its forms, and
-// its connectors, plus "teaches"/"steps" docs shown in the gallery.
+// Workflow templates — the ready-made "Banco del Futuro" products. Each bundles
+// a process definition (with layout), its forms, and its agents/connectors, plus
+// "teaches"/"steps" docs shown in the gallery. Every product has a real AI agent
+// (Claude, tool-calling) for its decision step; agents are installed key-less and
+// inherit the platform key at seed. Forms/agents are reusable across flows.
 
 import type { ConnectorRow } from "./db.js";
 import type { FormDefinition, ProcessDefinition } from "@cassiopeia/model";
-import { maxPublishedVersion, saveConnector, saveDefinition, saveForm } from "./db.js";
-import { ONBOARDING, ONBOARDING_FORM, MANUAL_REVIEW_FORM } from "./sample.js";
+import { getDefinition, maxPublishedVersion, saveConnector, saveDefinition, saveForm } from "./db.js";
+import { ONBOARDING, ONBOARDING_FORM, MANUAL_REVIEW_FORM, ONBOARDING_CONNECTORS } from "./sample.js";
 
 export interface Template {
   id: string;
@@ -18,235 +20,283 @@ export interface Template {
   connectors: ConnectorRow[];
 }
 
-// ---------- 1. New client onboarding (reuses the sample) ----------
+const ANTHROPIC = "https://api.anthropic.com/v1";
+const MODEL = "claude-haiku-4-5-20251001";
+
+// ---- shared agents (reusable across flows) --------------------------------
+
+// Credit scoring analyst — used by BOTH the loan pre-approval and the personal
+// credit flows. Calls the credit_bureau tool, then decides.
+const CREDIT_AGENT: ConnectorRow = {
+  id: "credit-agent",
+  type: "ai-agent",
+  config: {
+    baseUrl: ANTHROPIC, model: MODEL, apiKey: "", jsonOutput: true,
+    instructions:
+      "Sos un analista de riesgo crediticio de un banco. Primero llamá a la herramienta credit_bureau con el annualIncome y el amount del solicitante para obtener su perfil crediticio. Después decidí. Respondé SOLO con un objeto JSON: {\"creditScore\": <el número del buró>, \"decision\": \"approved\" o \"review\", \"reasoning\": \"<una frase corta EN ESPAÑOL>\", \"confidence\": <0..1>}.",
+    requiredKeys: ["creditScore", "decision"],
+    tools: [{
+      name: "credit_bureau",
+      description: "Retrieve the applicant's credit score and repayment decision from the credit bureau",
+      connector: "mock-credit-score",
+      parameters: { type: "object", properties: { annualIncome: { type: "number" }, amount: { type: "number" } }, required: ["annualIncome", "amount"] },
+    }],
+  },
+};
+
+const MORTGAGE_AGENT: ConnectorRow = {
+  id: "mortgage-agent",
+  type: "ai-agent",
+  config: {
+    baseUrl: ANTHROPIC, model: MODEL, apiKey: "", jsonOutput: true,
+    instructions:
+      "Sos un asesor hipotecario de un banco. Primero llamá a la herramienta mortgage_calc con propertyValue, downPayment, termYears y annualIncome para obtener la cuota mensual (monthlyPayment) y el ratio de endeudamiento (dti). Después decidí. Respondé SOLO con un objeto JSON: {\"monthlyPayment\": <número>, \"dti\": <número>, \"decision\": \"approved\" o \"declined\", \"reasoning\": \"<una frase corta EN ESPAÑOL>\"}. Aprobá cuando el dti sea menor o igual a 0.35.",
+    requiredKeys: ["decision", "monthlyPayment"],
+    tools: [{
+      name: "mortgage_calc",
+      description: "Compute the monthly payment and debt-to-income ratio for the mortgage",
+      connector: "mock-mortgage",
+      parameters: { type: "object", properties: { propertyValue: { type: "number" }, downPayment: { type: "number" }, termYears: { type: "number" }, annualIncome: { type: "number" } }, required: ["propertyValue", "termYears", "annualIncome"] },
+    }],
+  },
+};
+
+// Fraud analyst — assesses the travel notice risk (no side effects). A separate
+// deterministic service task does the actual registration.
+const FRAUD_AGENT: ConnectorRow = {
+  id: "fraud-agent",
+  type: "ai-agent",
+  config: {
+    baseUrl: ANTHROPIC, model: MODEL, apiKey: "", jsonOutput: true,
+    instructions:
+      "Sos un analista de fraude de tarjetas de un banco. El cliente avisa un viaje (países y fechas). Evaluá el riesgo de fraude del aviso (destinos inusuales, fechas incoherentes, etc.). Respondé SOLO con un objeto JSON: {\"riskLevel\": \"bajo\" | \"medio\" | \"alto\", \"reasoning\": \"<una frase corta EN ESPAÑOL>\"}.",
+    requiredKeys: ["riskLevel"],
+  },
+};
+
+const MOCK_CREDIT: ConnectorRow = { id: "mock-credit-score", type: "mock-credit-score", config: {} };
+const MOCK_MORTGAGE: ConnectorRow = { id: "mock-mortgage", type: "mock-mortgage", config: {} };
+const MOCK_TRAVEL: ConnectorRow = { id: "travel-register", type: "mock-travel-register", config: {} };
+
+// ---------- 1. Apertura de cuenta (onboarding, defined in sample.ts) ----------
 const onboarding: Template = {
   id: "onboarding",
-  name: "Alta de nuevo cliente",
+  name: "Apertura de cuenta",
   description:
-    "Recolectá los datos y documentos de un nuevo cliente, verificalos con un agente de IA, y abrí la cuenta automáticamente o derivá los casos de alto riesgo a revisión manual.",
+    "El cliente abre una cuenta: carga sus datos, un agente de IA hace la verificación KYC/AML (consultando listas de riesgo) y decide abrir la cuenta al instante o derivar a cumplimiento. Los casos limpios se abren solos.",
   teaches: [
-    "A user task with an attached form (legal name, income, documents)",
-    "An AI-agent service task that returns a structured risk decision",
-    "A gateway that routes on the AI result (riskScore > 0.7)",
-    "A second human task (manual review) on the risky branch",
+    "Un agente KYC/AML real (Claude) con tool-calling a un screening de listas",
+    "Un gateway que enruta según la decisión del agente (approve / review)",
+    "Una tarea humana de cumplimiento (área: cumplimiento) para los casos marcados",
+    "Un servicio automático que abre la cuenta al final",
   ],
   steps: [
-    "Request Customer Info collects the applicant's data via its form.",
-    "Verify Documents calls the ai-verify connector, which returns {riskScore, verified}.",
-    "The Risk? gateway sends riskScore > 0.7 to Manual Review, everything else to Create Account.",
-    "Create Account calls a connector to open the account; the flow ends.",
+    "Datos del cliente recolecta nombre, documento, ingreso y tipo de cliente.",
+    "Verificación KYC (IA) llama a aml_screening, evalúa el riesgo y devuelve {amlRisk, decision, reasoning}.",
+    "¿Aprobado? manda decision=='review' a Revisión de cumplimiento; el resto a Abrir cuenta.",
+    "Revisión de cumplimiento (prioridad alta, SLA 24h) aprueba → Abrir cuenta, o rechaza → Rechazado.",
+    "Abrir cuenta genera el número de cuenta y termina en Cuenta abierta.",
   ],
   definition: ONBOARDING,
   forms: [ONBOARDING_FORM, MANUAL_REVIEW_FORM],
-  connectors: [
-    { id: "verify-docs", type: "mock-verify", config: {} },
-    { id: "create-account", type: "mock-create-account", config: {} },
-    {
-      id: "ai-verify",
-      type: "ai-agent",
-      config: {
-        baseUrl: "http://localhost:3001/mock-llm",
-        apiKey: "mock-key",
-        model: "claude-sonnet-5",
-        instructions:
-          "You verify a customer's onboarding documents. Return JSON {riskScore: 0-1, verified: boolean}.",
-        jsonOutput: true,
-      },
-    },
-  ],
+  connectors: ONBOARDING_CONNECTORS,
 };
 
-// ---------- 2. Mortgage simulator ----------
-const mortgageForm: FormDefinition = {
-  id: "mortgage-form",
-  version: 1,
-  title: "Mortgage Simulation Request",
+// ---------- 2. Solicitud de hipoteca ----------
+const hipotecaForm: FormDefinition = {
+  id: "hipoteca-form", version: 1, title: "Solicitud de hipoteca",
   fields: [
-    { kind: "text", id: "m_name", bind: "legalName", label: "Full name", required: true },
-    { kind: "number", id: "m_price", bind: "propertyValue", label: "Property value", required: true, min: 0 },
-    { kind: "number", id: "m_down", bind: "downPayment", label: "Down payment", required: true, min: 0 },
-    { kind: "number", id: "m_term", bind: "termYears", label: "Term (years)", required: true, min: 1, max: 40, defaultValue: 20 },
-    { kind: "number", id: "m_income", bind: "annualIncome", label: "Annual income", required: true, min: 0 },
+    { kind: "text", id: "h_name", bind: "fullName", label: "Nombre y apellido", required: true },
+    { kind: "email", id: "h_email", bind: "email", label: "Email", required: true },
+    { kind: "number", id: "h_price", bind: "propertyValue", label: "Valor de la propiedad (USD)", required: true, min: 0 },
+    { kind: "number", id: "h_down", bind: "downPayment", label: "Anticipo (USD)", required: true, min: 0 },
+    { kind: "number", id: "h_term", bind: "termYears", label: "Plazo (años)", required: true, min: 1, max: 40, defaultValue: 20 },
+    { kind: "number", id: "h_income", bind: "annualIncome", label: "Ingreso anual (USD)", required: true, min: 0 },
   ],
 };
-const mortgageOffer: FormDefinition = {
-  id: "mortgage-offer-form",
-  version: 1,
-  title: "Your Mortgage Offer",
+const hipotecaOffer: FormDefinition = {
+  id: "hipoteca-oferta", version: 1, title: "Tu oferta de hipoteca",
   fields: [
-    { kind: "select", id: "mo_decision", bind: "offerDecision", label: "Do you accept this offer?", required: true, options: [{ label: "Accept", value: "accept" }, { label: "Decline", value: "decline" }] },
+    { kind: "computed", id: "ho_pay", bind: "monthlyPaymentShown", label: "Cuota mensual estimada (USD)", expr: "monthlyPayment" },
+    { kind: "computed", id: "ho_dti", bind: "dtiShown", label: "Ratio de endeudamiento", expr: "dti" },
+    { kind: "checkbox", id: "ho_ok", bind: "accepted", label: "Acepto las condiciones de la hipoteca", required: true },
   ],
 };
 const mortgage: Template = {
   id: "mortgage-sim",
-  name: "Simulador de hipoteca",
+  name: "Solicitud de hipoteca",
   description:
-    "Dejá que un prospecto simule una hipoteca: capturá la propiedad y los ingresos, calculá la cuota mensual y la accesibilidad, y presentá una oferta o sugerí ajustes.",
+    "El cliente pide una hipoteca: carga la propiedad y sus ingresos, un agente de IA calcula la cuota y el ratio de endeudamiento y aprueba o rechaza. Si aprueba, presenta la oferta para aceptar.",
   teaches: [
-    "A compute service task (mock-mortgage) returning payment + affordability",
-    "A gateway branching on a boolean the connector produced (affordable)",
-    "Showing computed results back to the user in a follow-up form",
+    "Un agente de IA (Claude) que calcula la cuota con una herramienta y juzga la accesibilidad",
+    "Un gateway que enruta según la decisión del agente (approved / declined)",
+    "Una oferta con campos calculados (cuota, dti) que el cliente acepta",
   ],
   steps: [
-    "Loan Request captures property value, down payment, term and income.",
-    "Simulate calls mock-mortgage → {loanAmount, monthlyPayment, dti, affordable}.",
-    "Affordable? routes affordable == true to Present Offer, else to Suggest Adjustments.",
-    "Swap mock-mortgage for a real pricing API or an AI agent connector when ready.",
+    "Datos de la propiedad captura valor, anticipo, plazo e ingreso.",
+    "Análisis de capacidad (IA) llama a mortgage_calc y devuelve {monthlyPayment, dti, decision}.",
+    "¿Aprobado? manda approved a Tu oferta; el resto a Rechazado.",
+    "Tu oferta muestra la cuota y toma la aceptación del cliente; termina en Aprobado o Rechazado.",
   ],
-  forms: [mortgageForm, mortgageOffer],
-  connectors: [{ id: "mortgage-calc", type: "mock-mortgage", config: {} }],
+  forms: [hipotecaForm, hipotecaOffer],
+  connectors: [MORTGAGE_AGENT, MOCK_MORTGAGE],
   definition: {
-    id: "mortgage-sim", name: "Simulador de hipoteca", version: 1, status: "published", startNodeId: "start",
+    id: "mortgage-sim", name: "Solicitud de hipoteca", version: 1, status: "published", startNodeId: "start",
     nodes: [
       { id: "start", type: "start" },
-      { id: "request", type: "userTask", name: "Loan Request", formId: "mortgage-form" },
-      { id: "simulate", type: "serviceTask", name: "Simulate", connectorId: "mortgage-calc" },
-      { id: "afford", type: "gateway", name: "Affordable?", branches: [{ edgeId: "e_no", when: "affordable == false" }], defaultEdgeId: "e_yes" },
-      { id: "offer", type: "userTask", name: "Present Offer", formId: "mortgage-offer-form" },
-      { id: "adjust", type: "userTask", name: "Suggest Adjustments", formId: "mortgage-form" },
-      { id: "end", type: "end" },
+      { id: "datos", type: "userTask", name: "Datos de la propiedad", formId: "hipoteca-form" },
+      { id: "analisis", type: "serviceTask", name: "Análisis de capacidad (IA)", connectorId: "mortgage-agent", inputMap: { propertyValue: "propertyValue", downPayment: "downPayment", termYears: "termYears", annualIncome: "annualIncome" }, retries: 1, retryDelayMs: 200 },
+      { id: "gw", type: "gateway", name: "¿Aprobado?", branches: [{ edgeId: "e_ok", when: "decision == 'approved'" }], defaultEdgeId: "e_no" },
+      { id: "offer", type: "userTask", name: "Tu oferta", formId: "hipoteca-oferta" },
+      { id: "gwSign", type: "gateway", name: "¿Aceptás?", branches: [{ edgeId: "e_acc", when: "accepted == true" }], defaultEdgeId: "e_dec" },
+      { id: "endOk", type: "end", name: "Aprobado" },
+      { id: "endNo", type: "end", name: "Rechazado" },
     ],
     edges: [
-      { id: "e0", from: "start", to: "request" },
-      { id: "e1", from: "request", to: "simulate" },
-      { id: "e2", from: "simulate", to: "afford" },
-      { id: "e_yes", from: "afford", to: "offer" },
-      { id: "e_no", from: "afford", to: "adjust" },
-      { id: "e3", from: "offer", to: "end" },
-      { id: "e4", from: "adjust", to: "end" },
+      { id: "e0", from: "start", to: "datos" },
+      { id: "e1", from: "datos", to: "analisis" },
+      { id: "e2", from: "analisis", to: "gw" },
+      { id: "e_ok", from: "gw", to: "offer" },
+      { id: "e_no", from: "gw", to: "endNo" },
+      { id: "e3", from: "offer", to: "gwSign" },
+      { id: "e_acc", from: "gwSign", to: "endOk" },
+      { id: "e_dec", from: "gwSign", to: "endNo" },
     ],
     layout: {
-      start: { x: 40, y: 200 }, request: { x: 200, y: 190 }, simulate: { x: 400, y: 190 },
-      afford: { x: 600, y: 200 }, offer: { x: 780, y: 90 }, adjust: { x: 780, y: 300 }, end: { x: 980, y: 200 },
+      start: { x: 40, y: 200 }, datos: { x: 180, y: 200 }, analisis: { x: 360, y: 200 }, gw: { x: 560, y: 200 },
+      offer: { x: 730, y: 110 }, gwSign: { x: 910, y: 110 }, endOk: { x: 1090, y: 110 }, endNo: { x: 730, y: 320 },
     },
   },
 };
 
-// ---------- 3. Personal credit request ----------
-const creditForm: FormDefinition = {
-  id: "credit-form",
-  version: 1,
-  title: "Personal Credit Application",
+// ---------- 3. Solicitud de crédito personal (reuses credit-agent) ----------
+const creditoForm: FormDefinition = {
+  id: "credito-form", version: 1, title: "Solicitud de crédito personal",
   fields: [
-    { kind: "text", id: "c_name", bind: "legalName", label: "Full name", required: true },
-    { kind: "number", id: "c_amount", bind: "amount", label: "Requested amount", required: true, min: 0 },
-    { kind: "number", id: "c_income", bind: "annualIncome", label: "Annual income", required: true, min: 0 },
-    { kind: "select", id: "c_purpose", bind: "purpose", label: "Purpose", required: true, options: [
-      { label: "Home improvement", value: "home" }, { label: "Vehicle", value: "vehicle" },
-      { label: "Debt consolidation", value: "debt" }, { label: "Other", value: "other" },
-    ] },
+    { kind: "text", id: "c_name", bind: "fullName", label: "Nombre y apellido", required: true },
+    { kind: "email", id: "c_email", bind: "email", label: "Email", required: true },
+    { kind: "number", id: "c_amount", bind: "amount", label: "Monto solicitado (USD)", required: true, min: 1000 },
+    { kind: "number", id: "c_income", bind: "annualIncome", label: "Ingreso anual (USD)", required: true, min: 0 },
+    { kind: "select", id: "c_purpose", bind: "purpose", label: "Destino del crédito", required: true, options: [
+      { label: "Refacción del hogar", value: "hogar" }, { label: "Vehículo", value: "vehiculo" },
+      { label: "Unificación de deudas", value: "deudas" }, { label: "Otro", value: "otro" }] },
   ],
 };
-const creditSign: FormDefinition = {
-  id: "credit-sign-form", version: 1, title: "Approved — Sign Agreement",
-  fields: [{ kind: "checkbox", id: "cs_agree", bind: "agreed", label: "I accept the credit terms", required: true }],
+const creditoSign: FormDefinition = {
+  id: "credito-firma", version: 1, title: "Firmá tu crédito",
+  fields: [
+    { kind: "computed", id: "cs_score", bind: "scoreShown", label: "Tu score crediticio", expr: "creditScore" },
+    { kind: "checkbox", id: "cs_ok", bind: "agreed", label: "Acepto las condiciones del crédito", required: true },
+  ],
 };
-const creditReview: FormDefinition = {
-  id: "credit-review-form", version: 1, title: "Underwriting Decision",
-  fields: [{ kind: "select", id: "cr_dec", bind: "underwriterDecision", label: "Decision", required: true, options: [{ label: "Approve", value: "approve" }, { label: "Reject", value: "reject" }] }],
+const creditoReview: FormDefinition = {
+  id: "credito-review", version: 1, title: "Análisis manual de crédito",
+  fields: [
+    { kind: "computed", id: "cr_score", bind: "scoreShown", label: "Score del solicitante", expr: "creditScore" },
+    { kind: "select", id: "cr_dec", bind: "underwriterDecision", label: "Decisión", required: true, options: [
+      { label: "Aprobar", value: "approve" }, { label: "Rechazar", value: "reject" }] },
+    { kind: "text", id: "cr_notes", bind: "notes", label: "Notas" },
+  ],
 };
 const credit: Template = {
   id: "personal-credit",
   name: "Solicitud de crédito personal",
   description:
-    "Tomá una solicitud de crédito personal, corré un chequeo de crédito automático, y separá en aprobación instantánea (firma) o análisis manual según el score.",
+    "El cliente pide un crédito personal: un agente de IA (el mismo analista de crédito del préstamo) hace el scoring consultando el buró y decide. Los fuertes firman al instante; el resto va a un analista humano.",
   teaches: [
-    "A service task that scores an applicant (mock-credit-score)",
-    "Routing on a categorical connector result (decision == 'approved')",
-    "Two different follow-up forms depending on the branch",
+    "Reutilización de un agente (credit-agent) en más de un flujo",
+    "Ruteo según la decisión del agente (approved / review)",
+    "Una tarea de analista (área: creditos) que reincorpora al camino de firma",
   ],
   steps: [
-    "Credit Application captures amount, income and purpose.",
-    "Credit Check calls mock-credit-score → {creditScore, decision}.",
-    "Decision? sends decision == 'approved' to Sign Agreement, else to Manual Underwriting.",
-    "Replace mock-credit-score with a credit bureau API or an AI agent.",
+    "Solicitud de crédito captura monto, ingreso y destino.",
+    "Scoring crediticio (IA) llama al buró y devuelve {creditScore, decision, reasoning}.",
+    "¿Decisión? manda approved a Firmá tu crédito; el resto a Análisis manual.",
+    "Análisis manual (área: creditos) aprueba → firma, o rechaza → Rechazado.",
   ],
-  forms: [creditForm, creditSign, creditReview],
-  connectors: [{ id: "credit-score", type: "mock-credit-score", config: {} }],
+  forms: [creditoForm, creditoSign, creditoReview],
+  connectors: [CREDIT_AGENT, MOCK_CREDIT],
   definition: {
     id: "personal-credit", name: "Solicitud de crédito personal", version: 1, status: "published", startNodeId: "start",
     nodes: [
       { id: "start", type: "start" },
-      { id: "apply", type: "userTask", name: "Credit Application", formId: "credit-form" },
-      { id: "check", type: "serviceTask", name: "Credit Check", connectorId: "credit-score" },
-      { id: "decision", type: "gateway", name: "Decision?", branches: [{ edgeId: "e_appr", when: "decision == 'approved'" }], defaultEdgeId: "e_rev" },
-      { id: "sign", type: "userTask", name: "Sign Agreement", formId: "credit-sign-form" },
-      { id: "review", type: "userTask", name: "Manual Underwriting", formId: "credit-review-form" },
-      { id: "end", type: "end" },
+      { id: "apply", type: "userTask", name: "Solicitud de crédito", formId: "credito-form" },
+      { id: "scoring", type: "serviceTask", name: "Scoring crediticio (IA)", connectorId: "credit-agent", inputMap: { annualIncome: "annualIncome", amount: "amount" }, retries: 1, retryDelayMs: 200 },
+      { id: "gw", type: "gateway", name: "¿Decisión?", branches: [{ edgeId: "e_appr", when: "decision == 'approved'" }], defaultEdgeId: "e_rev" },
+      { id: "firma", type: "userTask", name: "Firmá tu crédito", formId: "credito-firma" },
+      { id: "review", type: "userTask", name: "Análisis manual", formId: "credito-review", candidateRole: "creditos", priority: "high", slaHours: 24 },
+      { id: "gwRev", type: "gateway", name: "¿Decisión del analista?", branches: [{ edgeId: "e_rev_ok", when: "underwriterDecision == 'approve'" }], defaultEdgeId: "e_rev_no" },
+      { id: "endOk", type: "end", name: "Aprobado" },
+      { id: "endNo", type: "end", name: "Rechazado" },
     ],
     edges: [
       { id: "e0", from: "start", to: "apply" },
-      { id: "e1", from: "apply", to: "check" },
-      { id: "e2", from: "check", to: "decision" },
-      { id: "e_appr", from: "decision", to: "sign" },
-      { id: "e_rev", from: "decision", to: "review" },
-      { id: "e3", from: "sign", to: "end" },
-      { id: "e4", from: "review", to: "end" },
+      { id: "e1", from: "apply", to: "scoring" },
+      { id: "e2", from: "scoring", to: "gw" },
+      { id: "e_appr", from: "gw", to: "firma" },
+      { id: "e_rev", from: "gw", to: "review" },
+      { id: "e_rev2", from: "review", to: "gwRev" },
+      { id: "e_rev_ok", from: "gwRev", to: "firma" },
+      { id: "e_rev_no", from: "gwRev", to: "endNo" },
+      { id: "e_firma_end", from: "firma", to: "endOk" },
     ],
     layout: {
-      start: { x: 40, y: 200 }, apply: { x: 200, y: 190 }, check: { x: 400, y: 190 },
-      decision: { x: 600, y: 200 }, sign: { x: 790, y: 90 }, review: { x: 790, y: 300 }, end: { x: 990, y: 200 },
+      start: { x: 40, y: 220 }, apply: { x: 180, y: 220 }, scoring: { x: 360, y: 220 }, gw: { x: 560, y: 220 },
+      firma: { x: 740, y: 120 }, endOk: { x: 940, y: 120 }, review: { x: 620, y: 360 }, gwRev: { x: 820, y: 360 }, endNo: { x: 1020, y: 360 },
     },
   },
 };
 
-// ---------- 4. Credit-card travel notification ----------
-const travelForm: FormDefinition = {
-  id: "travel-form",
-  version: 1,
-  title: "Travel Notification",
+// ---------- 4. Aviso de viaje de tarjeta (AI fraud check, automated) ----------
+const viajeForm: FormDefinition = {
+  id: "viaje-form", version: 1, title: "Aviso de viaje",
   fields: [
-    { kind: "text", id: "t_card", bind: "cardLast4", label: "Card last 4 digits", required: true, pattern: "^[0-9]{4}$" },
-    { kind: "text", id: "t_dest", bind: "destinations", label: "Countries you'll visit (comma separated)", required: true },
-    { kind: "date", id: "t_start", bind: "startDate", label: "Departure date", required: true },
-    { kind: "date", id: "t_end", bind: "endDate", label: "Return date", required: true },
+    { kind: "text", id: "v_name", bind: "fullName", label: "Nombre y apellido", required: true },
+    { kind: "text", id: "v_card", bind: "cardLast4", label: "Últimos 4 dígitos de la tarjeta", required: true, pattern: "^[0-9]{4}$" },
+    { kind: "text", id: "v_dest", bind: "destinations", label: "Países que vas a visitar (separados por coma)", required: true },
+    { kind: "date", id: "v_start", bind: "startDate", label: "Fecha de salida", required: true },
+    { kind: "date", id: "v_end", bind: "endDate", label: "Fecha de regreso", required: true },
   ],
-};
-const travelConfirm: FormDefinition = {
-  id: "travel-confirm-form", version: 1, title: "Travel Registered",
-  fields: [{ kind: "checkbox", id: "tc_ok", bind: "acknowledged", label: "I've noted my card is enabled for these countries", required: true }],
 };
 const travel: Template = {
   id: "travel-notification",
   name: "Aviso de viaje de tarjeta",
   description:
-    "Permití que un cliente le avise al banco dónde y cuándo viaja para que su tarjeta siga funcionando en el exterior. Captura los datos del viaje, los registra con la red de tarjetas y confirma.",
+    "El cliente avisa dónde y cuándo viaja para que su tarjeta funcione en el exterior. Un agente de IA evalúa el riesgo de fraude del aviso y, si está todo bien, lo registra con la red de tarjetas al instante.",
   teaches: [
-    "A form with validation (4-digit card, dates) and a date field",
-    "A service task that calls out to an external system (mock-travel-register)",
-    "A clean linear flow — no gateway needed",
+    "Un agente de IA (Claude) que evalúa fraude y ejecuta una acción vía tool-calling",
+    "Un flujo lineal, totalmente automático (sin intervención humana)",
+    "Un formulario con validación (tarjeta de 4 dígitos, fechas)",
   ],
   steps: [
-    "Travel Details collects card, destinations and dates (with pattern validation).",
-    "Register Travel calls mock-travel-register → {registered, reference, coverage}.",
-    "Confirmation shows the customer their card is enabled; the flow ends.",
-    "Swap mock-travel-register for the real card-network API.",
+    "Datos del viaje captura tarjeta, países y fechas (con validación).",
+    "Chequeo de fraude (IA) evalúa el riesgo y devuelve {riskLevel, reasoning}.",
+    "Registrar en la red da de alta el viaje y devuelve {registered, reference}; termina en Registrado.",
   ],
-  forms: [travelForm, travelConfirm],
-  connectors: [{ id: "travel-register", type: "mock-travel-register", config: {} }],
+  forms: [viajeForm],
+  connectors: [FRAUD_AGENT, MOCK_TRAVEL],
   definition: {
     id: "travel-notification", name: "Aviso de viaje de tarjeta", version: 1, status: "published", startNodeId: "start",
     nodes: [
       { id: "start", type: "start" },
-      { id: "details", type: "userTask", name: "Travel Details", formId: "travel-form" },
-      { id: "register", type: "serviceTask", name: "Register Travel", connectorId: "travel-register" },
-      { id: "confirm", type: "userTask", name: "Confirmation", formId: "travel-confirm-form" },
-      { id: "end", type: "end" },
+      { id: "details", type: "userTask", name: "Datos del viaje", formId: "viaje-form" },
+      { id: "check", type: "serviceTask", name: "Chequeo de fraude (IA)", connectorId: "fraud-agent", inputMap: { destinations: "destinations", startDate: "startDate", endDate: "endDate", cardLast4: "cardLast4" }, retries: 1, retryDelayMs: 200 },
+      { id: "register", type: "serviceTask", name: "Registrar en la red", connectorId: "travel-register", inputMap: { destinations: "destinations" } },
+      { id: "end", type: "end", name: "Registrado" },
     ],
     edges: [
       { id: "e0", from: "start", to: "details" },
-      { id: "e1", from: "details", to: "register" },
-      { id: "e2", from: "register", to: "confirm" },
-      { id: "e3", from: "confirm", to: "end" },
+      { id: "e1", from: "details", to: "check" },
+      { id: "e2", from: "check", to: "register" },
+      { id: "e3", from: "register", to: "end" },
     ],
     layout: {
-      start: { x: 40, y: 120 }, details: { x: 200, y: 110 }, register: { x: 420, y: 110 },
-      confirm: { x: 640, y: 110 }, end: { x: 840, y: 120 },
+      start: { x: 40, y: 120 }, details: { x: 200, y: 110 }, check: { x: 420, y: 110 }, register: { x: 640, y: 110 }, end: { x: 860, y: 120 },
     },
   },
 };
 
-// ---------- 5. Loan pre-approval (end-to-end, human-in-the-loop) ----------
+// ---------- 5. Pre-aprobación de préstamo (end-to-end, human-in-the-loop) ----------
 const loanApplicationForm: FormDefinition = {
   id: "loan-application", version: 1, title: "Solicitud de préstamo",
   fields: [
@@ -315,7 +365,7 @@ const loan: Template = {
   id: "loan-preapproval",
   name: "Pre-aprobación de préstamo",
   description:
-    "Pre-aprobación de un préstamo personal donde el chequeo de crédito es un agente de IA real (Claude) con tool-calling: consulta una herramienta de buró, razona sobre el resultado y devuelve una decisión estructurada. Los solicitantes fuertes se aprueban automáticamente; el resto va a un analista humano — luego se calcula la oferta y se firma.",
+    "Pre-aprobación de un préstamo personal donde el chequeo de crédito es un agente de IA real (Claude) con tool-calling: consulta el buró, razona sobre el resultado y devuelve una decisión estructurada. Los solicitantes fuertes se aprueban automáticamente; el resto va a un analista humano — luego se calcula la oferta y se firma.",
   teaches: [
     "Un agente de IA real (Claude) con tool-calling — llama a la herramienta credit_bureau mientras razona",
     "Guardrails de salida (requiredKeys) + un nivel de confianza en la decisión del agente",
@@ -334,32 +384,7 @@ const loan: Template = {
   ],
   definition: loanDef,
   forms: [loanApplicationForm, loanSignForm, loanUnderwriterForm],
-  connectors: [
-    // Real AI-agent credit analyst — calls the credit_bureau tool while reasoning.
-    // Installed key-less; add the API key in Settings / the connector library.
-    {
-      id: "credit-agent",
-      type: "ai-agent",
-      config: {
-        baseUrl: "https://api.anthropic.com/v1",
-        model: "claude-haiku-4-5-20251001",
-        apiKey: "",
-        jsonOutput: true,
-        instructions:
-          "Sos un analista de riesgo crediticio para un préstamo personal. Primero llamá a la herramienta credit_bureau con el annualIncome y el amount del solicitante para obtener su perfil crediticio. Después decidí. Respondé SOLO con un objeto JSON: {\"creditScore\": <el número del buró>, \"decision\": \"approved\" o \"review\", \"reasoning\": \"<una frase corta EN ESPAÑOL>\", \"confidence\": <0..1>}.",
-        requiredKeys: ["creditScore", "decision"],
-        tools: [{
-          name: "credit_bureau",
-          description: "Retrieve the applicant's credit score and repayment decision from the credit bureau",
-          connector: "mock-credit-score",
-          parameters: { type: "object", properties: { annualIncome: { type: "number" }, amount: { type: "number" } }, required: ["annualIncome", "amount"] },
-        }],
-      },
-    },
-    // The tool the agent calls (stands in for a real credit-bureau API).
-    { id: "mock-credit-score", type: "mock-credit-score", config: {} },
-    { id: "mock-mortgage", type: "mock-mortgage", config: {} },
-  ],
+  connectors: [CREDIT_AGENT, MOCK_CREDIT, MOCK_MORTGAGE],
 };
 
 export const TEMPLATES: Template[] = [onboarding, mortgage, credit, travel, loan];
@@ -380,4 +405,26 @@ export function installTemplate(id: string): string {
   saveDefinition({ ...t.definition, version, status: "published" });
   saveDefinition({ ...t.definition, version: 0, status: "draft" });
   return t.id;
+}
+
+const structureSig = (d: ProcessDefinition) => `${d.name}|${d.nodes.map((n) => n.id).sort().join(",")}`;
+
+/**
+ * Keep a product's installed flow in sync with its template. Always refreshes
+ * forms + agents (idempotent, keeps stored keys). Publishes a new version only
+ * when the latest published structure/name differs — so a template update rolls
+ * out once, then no-ops on later boots. Existing instances/versions are untouched.
+ */
+export function syncTemplate(id: string): boolean {
+  const t = TEMPLATES.find((x) => x.id === id);
+  if (!t) throw new Error(`Template not found: ${id}`);
+  for (const f of t.forms) saveForm(f);
+  for (const c of t.connectors) saveConnector(c);
+  let current: ProcessDefinition | undefined;
+  try { current = getDefinition(id); } catch { current = undefined; }
+  if (current && structureSig(current) === structureSig(t.definition)) return false;
+  const version = maxPublishedVersion(id) + 1;
+  saveDefinition({ ...t.definition, version, status: "published" });
+  saveDefinition({ ...t.definition, version: 0, status: "draft" });
+  return true;
 }

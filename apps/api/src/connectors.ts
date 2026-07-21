@@ -54,7 +54,10 @@ async function chatCompletion(
   const body: Record<string, unknown> = { model, messages };
   if (typeof config.temperature === "number") body.temperature = config.temperature;
   if (tools && tools.length) body.tools = tools;
-  else if (config.jsonOutput !== false) body.response_format = { type: "json_object" };
+  // Anthropic's OpenAI-compatible endpoint rejects response_format:json_object
+  // (it wants json_schema); the system prompt already enforces JSON-only output,
+  // so we only send response_format for other OpenAI-compatible providers.
+  else if (config.jsonOutput !== false && !/anthropic\.com/i.test(baseUrl)) body.response_format = { type: "json_object" };
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -110,6 +113,21 @@ const adapters: Record<string, Adapter> = {
       typeof input.legalName === "string" ? input.legalName : "customer";
     const slug = name.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 12);
     return { accountId: `ACC-${slug}` };
+  },
+
+  // Stand-in for an AML / sanctions / PEP screening service (the tool a KYC
+  // agent calls). Deterministic from the applicant's name so the demo is stable.
+  "mock-aml": async (input) => {
+    const name = String(input.legalName ?? input.fullName ?? "").toLowerCase();
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+    const amlRisk = Math.round((h % 100) / 100 * 100) / 100; // 0..0.99
+    return {
+      amlRisk,
+      watchlistHit: amlRisk > 0.85,
+      pep: amlRisk > 0.9,
+      sanctions: amlRisk > 0.95,
+    };
   },
 
   // Mortgage math. Swap for a real pricing API or an AI agent later.
