@@ -62,7 +62,7 @@ export function Drafts() {
   }
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       {!mailerReady && (
         <div style={S.warn}>Para enviar recordatorios, configurá el correo en <b>Ajustes → Correo</b>.</div>
       )}
