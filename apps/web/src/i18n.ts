@@ -7,7 +7,7 @@ export type Lang = "en" | "es";
 const DICT: Record<Lang, Record<string, string>> = {
   en: {
     home: "Home", stats: "Stats", templates: "Templates", build: "Flows",
-    forms: "Forms", agents: "Agents",
+    forms: "Forms", agents: "Integrations",
     run: "Run", inbox: "Inbox", monitor: "Executions", drafts: "Incomplete", audit: "Audit", settings: "Settings",
     overview: "Overview", workflow: "Workflow", design: "Design", operate: "Operate", governance: "Governance",
     home_hint: "Your workflows at a glance",
@@ -15,7 +15,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     templates_hint: "Start from a ready-made banking workflow",
     build_hint: "Design a process: human tasks, agents and forms",
     forms_hint: "Design and reuse forms across your flows",
-    agents_hint: "Create reusable AI agents for service tasks",
+    agents_hint: "A catalog of connections -- APIs, AI agents and MCP tools -- to invoke from your flows",
     run_hint: "Try it as an end user",
     inbox_hint: "Your worklist of open human tasks",
     monitor_hint: "Every application, end to end — data, AI decisions, approvals",
@@ -25,7 +25,7 @@ const DICT: Record<Lang, Record<string, string>> = {
   },
   es: {
     home: "Inicio", stats: "Estadísticas", templates: "Plantillas", build: "Flujos",
-    forms: "Formularios", agents: "Agentes",
+    forms: "Formularios", agents: "Integraciones",
     run: "Ejecutar", inbox: "Bandeja", monitor: "Ejecuciones", drafts: "Sin completar", audit: "Auditoría", settings: "Ajustes",
     overview: "Resumen", workflow: "Flujo", design: "Diseño", operate: "Operación", governance: "Gobierno",
     home_hint: "Tus flujos de un vistazo",
@@ -33,7 +33,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     templates_hint: "Empieza desde un flujo bancario listo para usar",
     build_hint: "Diseñá un proceso: tareas humanas, agentes y formularios",
     forms_hint: "Diseñá y reutilizá formularios en tus flujos",
-    agents_hint: "Creá agentes de IA reutilizables para las tareas de servicio",
+    agents_hint: "Un catálogo de conexiones -- APIs, agentes de IA y MCP -- para invocar desde tus flujos",
     run_hint: "Pruébalo como usuario final",
     inbox_hint: "Tu lista de tareas humanas abiertas",
     monitor_hint: "Cada solicitud, de punta a punta — datos, decisiones de IA y aprobaciones",

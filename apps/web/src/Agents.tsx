@@ -6,10 +6,10 @@ type Connector = { id: string; type: string; config: Record<string, any> };
 
 const uid = () => Math.random().toString(36).slice(2, 6);
 
-// Agent (connector) types, most-common first. "describer" is the platform model
-// and lives in Settings, so it's excluded from this library.
+// Integration (connector) types. "describer"/"mailer"/"automation" are platform
+// connectors and live in Settings, so they're excluded from this catalog.
 const TYPE_ES: Record<string, string> = {
-  "ai-agent": "Agente IA", "maverick-agent": "Maverick", mcp: "MCP", http: "HTTP",
+  http: "API", "ai-agent": "Agente de IA", mcp: "MCP", "maverick-agent": "Maverick",
 };
 const typeLabel = (t: string) => TYPE_ES[t] ?? (t.startsWith("mock") ? "Mock" : t);
 
@@ -19,6 +19,12 @@ const NEW_CONFIG: Record<string, Record<string, any>> = {
   mcp: { url: "https://your-mcp-server/mcp", toolName: "", apiKey: "" },
   http: { url: "", method: "POST" },
 };
+
+// Status lives in config (no schema change). Legacy connectors have no status →
+// treated as published so existing flows keep working.
+const statusOf = (c: Connector) => (c.config?.status as string) ?? "published";
+const nameOf = (c: Connector) => ((c.config?.label as string) || "").trim() || c.id;
+const isPublished = (c: Connector) => statusOf(c) === "published";
 
 const CLAUDE_MODELS: [string, string][] = [["Haiku", "claude-haiku-4-5-20251001"], ["Sonnet", "claude-sonnet-5"], ["Opus", "claude-opus-4-8"]];
 
@@ -45,21 +51,27 @@ export function Agents() {
   const sel = connectors.find((c) => c.id === selId);
   const setCfg = (id: string, k: string, v: any) => setConnectors((cs) => cs.map((c) => (c.id === id ? { ...c, config: { ...c.config, [k]: v } } : c)));
 
-  async function newAgent(type: string) {
-    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : type === "http" ? "http" : "ia";
+  async function newIntegration(type: string) {
+    const prefix = type === "maverick-agent" ? "mav" : type === "mcp" ? "mcp" : type === "http" ? "api" : "ia";
     const id = `${prefix}_${uid()}`;
-    const c: Connector = { id, type, config: NEW_CONFIG[type] ?? {} };
+    const c: Connector = { id, type, config: { ...(NEW_CONFIG[type] ?? {}), label: `Nueva integración ${typeLabel(type)}`, status: "draft" } };
     await api("/connectors", { method: "POST", body: JSON.stringify(c) });
     await reload(id);
     setTestOut(""); setMsg("");
   }
   async function save(c: Connector) {
     setBusy(true);
-    try { await api("/connectors", { method: "POST", body: JSON.stringify(c) }); setMsg(`Agente ${c.id} guardado ✓`); await reload(c.id); }
+    try { await api("/connectors", { method: "POST", body: JSON.stringify(c) }); setMsg(`Integración guardada ✓`); await reload(c.id); }
     finally { setBusy(false); }
   }
+  async function setStatus(c: Connector, status: string) {
+    const updated = { ...c, config: { ...c.config, status } };
+    await api("/connectors", { method: "POST", body: JSON.stringify(updated) });
+    setMsg(status === "published" ? "Integración publicada ✓ — ya se puede usar en los flujos" : "Integración despublicada");
+    await reload(c.id);
+  }
   async function remove(c: Connector) {
-    if (!window.confirm(`¿Eliminar el agente "${c.id}"?`)) return;
+    if (!window.confirm(`¿Eliminar la integración "${nameOf(c)}"?`)) return;
     const r = await api(`/connectors/${c.id}`, { method: "DELETE" });
     if (!r.ok && r.data?.usedBy) { alert(`No se puede eliminar: lo usan → ${r.data.usedBy.join(", ")}`); return; }
     const next = connectors.find((x) => x.id !== c.id)?.id ?? null;
@@ -75,50 +87,63 @@ export function Agents() {
 
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-      {/* ---- agent list ---- */}
+      {/* ---- integration catalog ---- */}
       <div style={S.sideCard}>
         <div style={S.sideHead}>
-          <span style={S.eyebrow}>Agentes ({connectors.length})</span>
-          <button style={S.newBtn} onClick={() => newAgent("ai-agent")}>+ Agente IA</button>
+          <span style={S.eyebrow}>Integraciones ({connectors.length})</span>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "10px 10px 4px" }}>
+          <span style={{ ...S.hint, width: "100%", marginTop: 0 }}>+ Nueva conexión:</span>
+          <button style={S.miniBtn} onClick={() => newIntegration("http")}>API</button>
+          <button style={S.miniBtn} onClick={() => newIntegration("ai-agent")}>Agente de IA</button>
+          <button style={S.miniBtn} onClick={() => newIntegration("mcp")}>MCP</button>
+          <button style={S.miniBtn} onClick={() => newIntegration("maverick-agent")}>Maverick</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10 }}>
           {connectors.map((c) => {
             const active = selId === c.id;
+            const pub = isPublished(c);
             return (
               <div key={c.id} className="hoverable" onClick={() => { setSelId(c.id); setTestOut(""); setMsg(""); }}
                 style={{ cursor: "pointer", padding: "10px 12px", borderRadius: 10, border: active ? "1.5px solid var(--primary)" : "1px solid var(--border)", background: active ? "var(--primary-tint)" : "var(--surface-2)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.id}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{c.config?.model ? c.config.model : c.type}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(c)}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{typeLabel(c.type)}{c.config?.model ? ` · ${c.config.model}` : ""}</div>
                   </div>
-                  <span style={S.typePill}>{typeLabel(c.type)}</span>
+                  <span style={pub ? S.pubPill : S.draftPill}>{pub ? "Publicada" : "Borrador"}</span>
                 </div>
               </div>
             );
           })}
-          {connectors.length === 0 && <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Todavía no hay agentes. Creá uno con <b>+ Agente IA</b>.</div>}
-        </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 10px 12px" }}>
-          <button style={S.miniBtn} onClick={() => newAgent("maverick-agent")}>+ Maverick</button>
-          <button style={S.miniBtn} onClick={() => newAgent("mcp")}>+ MCP</button>
-          <button style={S.miniBtn} onClick={() => newAgent("http")}>+ HTTP</button>
+          {connectors.length === 0 && <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Todavía no hay integraciones. Creá una arriba (API, Agente de IA o MCP).</div>}
         </div>
       </div>
 
       {/* ---- editor ---- */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {!sel && <div style={{ ...S.card, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>Seleccioná o creá un agente para configurarlo.</div>}
+        {!sel && <div style={{ ...S.card, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>Seleccioná o creá una integración para configurarla.</div>}
         {sel && (
           <div style={S.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{sel.id}</h2>
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{typeLabel(sel.type)}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={S.typePill}>{typeLabel(sel.type)}</span>
+                  <span style={isPublished(sel) ? S.pubPill : S.draftPill}>{isPublished(sel) ? "Publicada" : "Borrador"}</span>
+                  <code style={{ fontSize: 11, color: "var(--text-faint)" }}>{sel.id}</code>
+                </div>
+                <input style={{ ...S.input, fontSize: 17, fontWeight: 700, marginTop: 8, border: "1px solid transparent", padding: "4px 6px" }}
+                  value={(sel.config.label as string) ?? ""} placeholder="Nombre de la integración"
+                  onChange={(e) => setCfg(sel.id, "label", e.target.value)} />
               </div>
-              <button style={S.dangerGhost} onClick={() => remove(sel)}>Eliminar</button>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                {isPublished(sel)
+                  ? <button style={S.ghost} onClick={() => setStatus(sel, "draft")}>Despublicar</button>
+                  : <button style={S.primary} onClick={() => setStatus(sel, "published")}>Publicar</button>}
+                <button style={S.dangerGhost} onClick={() => remove(sel)}>Eliminar</button>
+              </div>
             </div>
-            <p style={S.hint}>Este agente puede asociarse a la tarea de servicio de cualquier flujo. La clave se guarda encriptada y se muestra enmascarada — dejala en blanco para conservarla.</p>
+            <p style={S.hint}>Una conexión reutilizable a un sistema. Solo las <b>publicadas</b> aparecen en el diseñador de flujos. La clave se guarda encriptada — dejala en blanco para conservarla.</p>
 
             {sel.type === "ai-agent" && <>
               <div style={{ display: "flex", gap: 6, margin: "10px 0 2px", alignItems: "center", flexWrap: "wrap" }}>
@@ -174,7 +199,7 @@ export function Agents() {
 
             {/* test panel */}
             <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-              <div style={S.eyebrow}>Probar el agente</div>
+              <div style={S.eyebrow}>Probar la integración</div>
               <L>Datos de prueba (JSON)</L>
               <textarea style={{ ...S.input, height: 54, fontFamily: "monospace" }} value={testInput} onChange={(e) => setTestInput(e.target.value)} />
               <button style={S.ghost} onClick={() => test(sel.id)}>Ejecutar prueba</button>
@@ -196,6 +221,8 @@ const S: Record<string, React.CSSProperties> = {
   newBtn: { background: "var(--primary)", color: "var(--on-primary)", border: 0, borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
   miniBtn: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "5px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" },
   typePill: { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", background: "var(--surface-3)", color: "var(--text-muted)", flexShrink: 0, textTransform: "uppercase", letterSpacing: 0.3 },
+  pubPill: { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", background: "#dcfce7", color: "#166534", flexShrink: 0, textTransform: "uppercase", letterSpacing: 0.3 },
+  draftPill: { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", background: "#fef3c7", color: "#92400e", flexShrink: 0, textTransform: "uppercase", letterSpacing: 0.3 },
   card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 18, boxShadow: "var(--shadow)" },
   hint: { fontSize: 12, color: "var(--text-muted)", marginTop: 4 },
   label: { display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginTop: 12, marginBottom: 4 },

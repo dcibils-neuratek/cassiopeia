@@ -849,17 +849,20 @@ function ServiceInspector({
   const num = (v: string): any => (v.trim() === "" ? undefined : Math.max(0, Number(v) || 0));
   return (
     <div>
-      <L>Agente <span style={S.hint}>reutilizable</span></L>
+      <L>Integración <span style={S.hint}>reutilizable, publicada</span></L>
       <select style={S.input} value={node.connectorId ?? ""} onChange={(e) => onPick(e.target.value)}>
-        <option value="">(ninguno)</option>
-        {connectors.filter((x) => x.id !== "describer").map((x) => <option key={x.id} value={x.id}>{x.id} ({x.type})</option>)}
+        <option value="">(ninguna)</option>
+        {connectors
+          .filter((x) => !["describer", "mailer", "automation"].includes(x.id))
+          .filter((x) => ((x.config?.status as string) ?? "published") === "published" || x.id === node.connectorId)
+          .map((x) => <option key={x.id} value={x.id}>{(x.config?.label as string)?.trim() || x.id} ({x.type})</option>)}
       </select>
       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
         <button style={S.ghost} onClick={() => onNew("ai-agent")}>+ Nuevo agente IA</button>
         <button style={S.ghost} onClick={() => onNew("maverick-agent")}>+ Maverick</button>
         <button style={S.ghost} onClick={() => onNew("mcp")}>+ MCP</button>
       </div>
-      <p style={S.hint}>Elegí un agente ya armado o creá uno. Gestioná todos los agentes desde el menú <b>Agentes</b>.</p>
+      <p style={S.hint}>Elegí una integración publicada o creá una. El catálogo completo está en <b>Integraciones</b>.</p>
 
       {c && c.type === "mcp" && (
         <>
